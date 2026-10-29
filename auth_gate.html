@@ -1,0 +1,142 @@
+<script>
+(function () {
+  const SESSION_KEY = 'ACE_ADMIN_SESSION_TOKEN';
+  let authenticated = false;
+  let validationStarted = false;
+  let currentToken = '';
+  let gateElement = null;
+  let statusElement = null;
+  let usernameElement = null;
+  let passcodeElement = null;
+  let submitElement = null;
+  const waitingCallbacks = [];
+
+  const style = document.createElement('style');
+  style.textContent = `
+    body.ace-auth-pending > :not(#ace-auth-gate) { visibility: hidden !important; }
+    #ace-auth-gate { position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15, 23, 42, .88); backdrop-filter: blur(8px); font-family: Arial, sans-serif; }
+    #ace-auth-gate .ace-auth-card { box-sizing: border-box; width: min(100%, 400px); padding: 30px; border-radius: 22px; background: #fff; box-shadow: 0 24px 80px rgba(0,0,0,.35); color: #0f172a; }
+    #ace-auth-gate h1 { margin: 0 0 8px; font-size: 22px; text-align: center; }
+    #ace-auth-gate p { margin: 0 0 20px; color: #64748b; font-size: 13px; text-align: center; }
+    #ace-auth-gate input { box-sizing: border-box; display: block; width: 100%; margin: 10px 0; padding: 13px 14px; border: 1px solid #cbd5e1; border-radius: 11px; font-size: 15px; }
+    #ace-auth-gate input:focus { outline: 2px solid #6366f1; border-color: transparent; }
+    #ace-auth-gate button { width: 100%; margin-top: 8px; padding: 13px; border: 0; border-radius: 11px; background: #4f46e5; color: white; font-size: 15px; font-weight: 700; cursor: pointer; }
+    #ace-auth-gate button:disabled { opacity: .6; cursor: wait; }
+    #ace-auth-gate .ace-auth-error { min-height: 18px; margin: 8px 0; color: #b91c1c; font-size: 12px; text-align: center; }
+  `;
+  document.head.appendChild(style);
+
+  function createGate_() {
+    if (gateElement) return;
+    if (!document.body) {
+      document.addEventListener('DOMContentLoaded', createGate_, { once: true });
+      return;
+    }
+    gateElement = document.createElement('div');
+    gateElement.id = 'ace-auth-gate';
+    gateElement.innerHTML = '<form class="ace-auth-card"><h1>เข้าสู่ระบบ ACE Tracking</h1><p>กรุณาเข้าสู่ระบบเพื่อดูข้อมูลและใช้งานระบบ</p><input name="username" autocomplete="username" placeholder="ชื่อผู้ใช้" required><input name="passcode" type="password" autocomplete="current-password" placeholder="รหัสผ่าน" required><div class="ace-auth-error" role="alert"></div><button type="submit">เข้าสู่ระบบ</button></form>';
+    document.body.appendChild(gateElement);
+    statusElement = gateElement.querySelector('.ace-auth-error');
+    usernameElement = gateElement.querySelector('[name="username"]');
+    passcodeElement = gateElement.querySelector('[name="passcode"]');
+    submitElement = gateElement.querySelector('button[type="submit"]');
+    gateElement.querySelector('form').addEventListener('submit', submitLogin_);
+    usernameElement.focus();
+  }
+
+  function runWith_(success, failure) {
+    if (!(typeof google !== 'undefined' && google.script && google.script.run)) {
+      failure(new Error('ต้องเปิดหน้านี้จาก Apps Script Web App'));
+      return null;
+    }
+    return google.script.run.withSuccessHandler(success).withFailureHandler(failure);
+  }
+
+  function setStatus_(message) {
+    createGate_();
+    statusElement.textContent = message || '';
+  }
+
+  function completeLogin_(token) {
+    currentToken = token;
+    authenticated = true;
+    try { localStorage.setItem(SESSION_KEY, token); } catch (error) {}
+    document.body.classList.remove('ace-auth-pending');
+    if (gateElement) gateElement.remove();
+    const callbacks = waitingCallbacks.splice(0, waitingCallbacks.length);
+    callbacks.forEach(item => {
+      try { item.onReady(token); } catch (error) { item.onError(error.message || String(error)); }
+    });
+  }
+
+  function validateStoredSession_() {
+    if (validationStarted) return;
+    validationStarted = true;
+    try { currentToken = localStorage.getItem(SESSION_KEY) || ''; } catch (error) { currentToken = ''; }
+    if (!currentToken) {
+      createGate_();
+      return;
+    }
+    const runner = runWith_(result => {
+      if (result && result.success) completeLogin_(currentToken);
+      else {
+        try { localStorage.removeItem(SESSION_KEY); } catch (error) {}
+        currentToken = '';
+        createGate_();
+      }
+    }, () => {
+      currentToken = '';
+      createGate_();
+    });
+    if (runner) runner.validateAdminSession(currentToken);
+  }
+
+  function submitLogin_(event) {
+    event.preventDefault();
+    const username = usernameElement.value.trim();
+    const passcode = passcodeElement.value;
+    if (!username || !passcode) return setStatus_('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน');
+    submitElement.disabled = true;
+    setStatus_('กำลังตรวจสอบบัญชี...');
+    const runner = runWith_(result => {
+      submitElement.disabled = false;
+      if (result && result.success && result.token) {
+        completeLogin_(result.token);
+        return;
+      }
+      passcodeElement.value = '';
+      setStatus_((result && result.error) || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+      passcodeElement.focus();
+    }, error => {
+      submitElement.disabled = false;
+      setStatus_(error && error.message ? error.message : 'ไม่สามารถตรวจสอบบัญชีได้');
+    });
+    if (runner) runner.verifyAdminAccess(passcode, username);
+  }
+
+  window.requireACELoginOnStartup_ = function (onReady, onError) {
+    const callback = { onReady: typeof onReady === 'function' ? onReady : function () {}, onError: typeof onError === 'function' ? onError : function (message) { console.error(message); } };
+    if (authenticated && currentToken) {
+      callback.onReady(currentToken);
+      return;
+    }
+    waitingCallbacks.push(callback);
+    validateStoredSession_();
+  };
+  window.withACEAdminSession_ = window.requireACELoginOnStartup_;
+
+  function startGate_() {
+    if (!document.body) return;
+    if (authenticated) {
+      document.body.classList.remove('ace-auth-pending');
+      return;
+    }
+    document.body.classList.add('ace-auth-pending');
+    validateStoredSession_();
+    if (!authenticated) createGate_();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startGate_, { once: true });
+  else startGate_();
+})();
+</script>

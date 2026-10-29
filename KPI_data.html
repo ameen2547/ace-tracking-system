@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VJ & Team KPI Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Kanit', sans-serif; background-color: #0f172a; color: #f8fafc; }
+    .glass-card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #1e293b; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+  </style>
+<?!= include('auth_gate'); ?>
+</head>
+<body class="min-h-screen pb-12">
+  <div id="app" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+    
+    <!-- A. Header & Controls Zone -->
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8 glass-card p-6 rounded-2xl shadow-2xl">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-pink-400">
+          <i class="fa-solid fa-chart-line mr-2"></i>ระบบบริหารจัดการและอัปเดต KPI VJ & Team
+        </h1>
+        <p class="text-xs md:text-sm text-slate-400 mt-1 flex items-center gap-2">
+          <span><i class="fa-regular fa-clock"></i> อัปเดตล่าสุด: {{ lastUpdated || 'กำลังโหลด...' }}</span>
+        </p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Month Selector -->
+        <select v-model="selectedSheet" @change="fetchData" class="bg-slate-800 border border-slate-700 text-slate-200 text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option v-for="m in monthList" :key="m" :value="m">{{ m }}</option>
+        </select>
+
+        <!-- Refresh Button -->
+        <button @click="fetchData" :disabled="loading" class="bg-slate-800 hover:bg-slate-700 text-slate-200 p-2.5 rounded-xl border border-slate-700 transition">
+          <i class="fa-solid fa-rotate-right" :class="{ 'fa-spin': loading }"></i>
+        </button>
+
+        <!-- Open Modal Button -->
+        <button @click="openConfigModal" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-sm font-medium px-5 py-2.5 rounded-xl shadow-lg transition flex items-center gap-2">
+          <i class="fa-solid fa-sliders"></i> ตั้งค่า KPI ประจำเดือน
+        </button>
+      </div>
+    </header>
+
+    <!-- Loading State -->
+    <div v-if="loading && !vjList.length" class="text-center py-20">
+      <i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-500 mb-4"></i>
+      <p class="text-slate-400">กำลังดึงข้อมูล Real-time แดชบอร์ด...</p>
+    </div>
+
+    <template v-else>
+      <!-- B. Team Executive Summary Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <!-- Card 1: Total Team Target -->
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Team Target</span>
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+              <i class="fa-solid fa-bullseye text-lg"></i>
+            </div>
+          </div>
+          <div class="text-2xl font-bold text-white">{{ formatNum(executiveSummary.totalTarget) }} <span class="text-xs font-normal text-slate-400">💎</span></div>
+          <div class="text-xs text-slate-400 mt-2">เป้าหมายรวม VJ ทั้งหมด {{ executiveSummary.totalVJs }} คน</div>
+        </div>
+
+        <!-- Card 2: Total Diamond Current -->
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Diamond Current</span>
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <i class="fa-solid fa-gem text-lg"></i>
+            </div>
+          </div>
+          <div class="text-2xl font-bold text-emerald-400">{{ formatNum(executiveSummary.totalCurrent) }} <span class="text-xs font-normal text-slate-400">💎</span></div>
+          <div class="text-xs text-slate-400 mt-2">ยอดเพชรรวมสะสมปัจจุบัน</div>
+        </div>
+
+        <!-- Card 3: Team Progress % -->
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Team Progress</span>
+            <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+              <i class="fa-solid fa-chart-pie text-lg"></i>
+            </div>
+          </div>
+          <div class="text-2xl font-bold text-purple-300">{{ executiveSummary.progressPct }}%</div>
+          <div class="w-full bg-slate-700 h-2 rounded-full mt-3 overflow-hidden">
+            <div class="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-500" :style="{ width: Math.min(100, executiveSummary.progressPct) + '%' }"></div>
+          </div>
+        </div>
+
+        <!-- Card 4: Remaining Deficit -->
+        <div class="glass-card p-5 rounded-2xl relative overflow-hidden">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Remaining Deficit</span>
+            <div class="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
+              <i class="fa-solid fa-circle-exclamation text-lg"></i>
+            </div>
+          </div>
+          <div class="text-2xl font-bold text-rose-400">{{ formatNum(executiveSummary.remainingDeficit) }} <span class="text-xs font-normal text-slate-400">💎</span></div>
+          <div class="text-xs text-slate-400 mt-2">ยอดเพชรที่ยังขาดอีกจะถึงเป้า</div>
+        </div>
+      </div>
+
+      <!-- D. VJ Performance Breakdown Table -->
+      <div class="glass-card rounded-2xl overflow-hidden shadow-2xl">
+        <!-- Table Toolbar -->
+        <div class="p-5 border-b border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-users text-indigo-400"></i> รายละเอียด KPI VJ รายบุคคล
+            </h2>
+            <span class="bg-indigo-500/20 text-indigo-300 text-xs px-2.5 py-1 rounded-full font-semibold">{{ filteredVJs.length }} คน</span>
+          </div>
+
+          <div class="flex flex-col sm:flex-row items-center gap-3">
+            <!-- Search Bar -->
+            <div class="relative w-full sm:w-64">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
+              <input v-model="searchQuery" type="text" placeholder="ค้นหาชื่อ VJ หรือ รหัส..." class="w-full bg-slate-800 border border-slate-700 text-xs rounded-xl pl-9 pr-4 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <!-- Team Filter -->
+            <select v-model="selectedTeamFilter" class="w-full sm:w-48 bg-slate-800 border border-slate-700 text-xs rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="ALL">ทุกสังกัด / ทุกทีม</option>
+              <option v-for="t in teamList" :key="t" :value="t">{{ t }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Main Table -->
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-800/80 uppercase text-slate-400 font-semibold border-b border-slate-700">
+              <tr>
+                <th class="py-3.5 px-4">โปรไฟล์ VJ & ทีม</th>
+                <th class="py-3.5 px-4 text-right">เป้าหมาย (Target)</th>
+                <th class="py-3.5 px-4 text-right">ยอดปัจจุบัน (Current)</th>
+                <th class="py-3.5 px-4 text-center">ความสำเร็จ (%)</th>
+                <th class="py-3.5 px-4 text-right">ขาดอีก (Deficit)</th>
+                <th class="py-3.5 px-4 text-center">ยอดรายวัน (1-31)</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800">
+              <template v-for="vj in filteredVJs" :key="vj.name">
+                <tr class="hover:bg-slate-800/40 transition">
+                  <!-- Profile Column -->
+                  <td class="py-3 px-4 flex items-center gap-3">
+                    <img :src="vj.avatar" class="w-9 h-9 rounded-full object-cover border border-slate-700 shadow" alt="avatar">
+                    <div>
+                      <div class="font-bold text-white text-sm">{{ vj.name }}</div>
+                      <div class="text-[11px] text-slate-400 flex items-center gap-1">
+                        <span class="inline-block w-2 h-2 rounded-full bg-indigo-400"></span> {{ vj.team }}
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Target Column -->
+                  <td class="py-3 px-4 text-right font-semibold text-slate-200">
+                    {{ formatNum(vj.target) }} 💎
+                  </td>
+
+                  <!-- Current Column -->
+                  <td class="py-3 px-4 text-right font-bold text-emerald-400">
+                    {{ formatNum(vj.current) }} 💎
+                  </td>
+
+                  <!-- Progress Column -->
+                  <td class="py-3 px-4 text-center">
+                    <div class="flex items-center justify-center gap-2">
+                      <span class="font-bold text-indigo-300 w-12 text-right">{{ vj.realProgress }}%</span>
+                      <div class="w-20 bg-slate-700 h-2 rounded-full overflow-hidden">
+                        <div class="bg-gradient-to-r from-indigo-500 to-pink-500 h-full rounded-full" :style="{ width: vj.progress + '%' }"></div>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- Deficit Column -->
+                  <td class="py-3 px-4 text-right font-semibold text-rose-400">
+                    {{ formatNum(vj.remaining) }} 💎
+                  </td>
+
+                  <!-- Expandable Button Column -->
+                  <td class="py-3 px-4 text-center">
+                    <button @click="toggleExpand(vj.name)" class="bg-slate-800 hover:bg-slate-700 text-indigo-400 px-3 py-1 rounded-lg border border-slate-700 text-[11px] transition">
+                      <i class="fa-solid" :class="expandedVJs.includes(vj.name) ? 'fa-chevron-up' : 'fa-calendar-days'"></i>
+                      {{ expandedVJs.includes(vj.name) ? 'ซ่อน' : 'ดู 31 วัน' }}
+                    </button>
+                  </td>
+                </tr>
+
+                <!-- Sub-table: Expandable Daily Breakdown (1-31) -->
+                <tr v-if="expandedVJs.includes(vj.name)" class="bg-slate-900/90">
+                  <td colspan="6" class="p-4">
+                    <div class="text-xs font-bold text-slate-400 mb-2 flex items-center gap-2">
+                      <i class="fa-solid fa-list-check text-indigo-400"></i> ยอดสะสมเพชรรายวันประจำเดือน (วันที่ 1 ถึง 31) - {{ vj.name }}
+                    </div>
+                    <div class="grid grid-cols-7 sm:grid-cols-11 md:grid-cols-16 gap-1.5">
+                      <div v-for="(dayScore, idx) in vj.daily" :key="idx" class="bg-slate-800 p-2 rounded-lg border border-slate-700/50 text-center">
+                        <div class="text-[10px] text-slate-400 mb-0.5">วันที่ {{ idx + 1 }}</div>
+                        <div class="font-bold text-[11px]" :class="dayScore > 0 ? 'text-emerald-400' : 'text-slate-500'">
+                          {{ dayScore > 0 ? formatNum(dayScore) : '-' }}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
+
+    <!-- C. KPI Configuration Modal -->
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div class="glass-card bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
+        <!-- Modal Header -->
+        <div class="p-5 border-b border-slate-700 flex items-center justify-between">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-gear text-indigo-400"></i> ตั้งค่า KPI ประจำเดือน (Team & VJ Settings)
+          </h3>
+          <button @click="showModal = false" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 space-y-5 max-h-[75vh] overflow-y-auto custom-scrollbar">
+          <!-- Mode Switcher -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 uppercase mb-2">เลือกโหมดการกระจาย KPI</label>
+            <div class="grid grid-cols-2 gap-3 p-1 bg-slate-800 rounded-xl border border-slate-700">
+              <button @click="configMode = 'Auto'" :class="configMode === 'Auto' ? 'bg-indigo-600 text-white font-bold shadow' : 'text-slate-400 hover:text-white'" class="py-2.5 rounded-lg text-xs transition">
+                <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> กระจาย KPI อัตโนมัติ (Auto)
+              </button>
+              <button @click="configMode = 'Manual'" :class="configMode === 'Manual' ? 'bg-indigo-600 text-white font-bold shadow' : 'text-slate-400 hover:text-white'" class="py-2.5 rounded-lg text-xs transition">
+                <i class="fa-solid fa-user-pen mr-1"></i> กำหนด KPI เองรายบุคคล (Manual)
+              </button>
+            </div>
+          </div>
+
+          <!-- Mode Auto Content -->
+          <div v-if="configMode === 'Auto'" class="space-y-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">เลือกทีม / สังกัด</label>
+              <select v-model="modalSelectedTeam" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200">
+                <option value="ALL">เลือก VJ ทุกทีมทั้งแผ่นงาน</option>
+                <option v-for="t in teamList" :key="t" :value="t">{{ t }}</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">เป้าหมายรวมของทีม (Total Team Target Diamond)</label>
+              <input v-model.number="modalTeamTarget" type="number" placeholder="เช่น 500000" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200 focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <!-- Auto Preview Box -->
+            <div class="bg-indigo-950/40 border border-indigo-500/30 p-4 rounded-xl">
+              <div class="text-xs font-bold text-indigo-300 mb-1"><i class="fa-solid fa-eye"></i> พรีวิวการกระจาย KPI</div>
+              <div class="text-xs text-slate-300">
+                จำนวน VJ ในทีม: <span class="font-bold text-white">{{ autoPreviewVJs.length }} คน</span><br>
+                ระบบจะเฉลี่ย KPI ให้ VJ คนละประมาณ: <span class="font-bold text-emerald-400 text-sm">{{ formatNum(autoCalculatedPerVJ) }} 💎</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Mode Manual Content -->
+          <div v-if="configMode === 'Manual'" class="space-y-3">
+            <div class="text-xs text-slate-400">กรอกเป้าหมาย KPI แยกตามรายชื่อ VJ แต่ละคน:</div>
+            <div class="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+              <div v-for="vj in modalManualList" :key="vj.name" class="flex items-center justify-between gap-3 bg-slate-800 p-2.5 rounded-xl border border-slate-700">
+                <div class="text-xs">
+                  <span class="font-bold text-white">{{ vj.name }}</span>
+                  <span class="text-[10px] text-slate-400 block">{{ vj.team }}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <input v-model.number="vj.target" type="number" class="w-32 bg-slate-900 border border-slate-700 text-right text-xs rounded-lg px-2.5 py-1.5 text-emerald-400 font-bold focus:ring-1 focus:ring-indigo-500">
+                  <span class="text-xs text-slate-400">💎</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-4 border-t border-slate-700 bg-slate-900/50 flex justify-end gap-3">
+          <button @click="showModal = false" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-xl transition">ยกเลิก</button>
+          <button @click="saveKPISettings" :disabled="saving" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 text-white font-bold text-xs px-5 py-2 rounded-xl shadow transition flex items-center gap-2">
+            <i class="fa-solid" :class="saving ? 'fa-circle-notch fa-spin' : 'fa-floppy-disk'"></i> บันทึกข้อมูล
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          loading: false,
+          saving: false,
+          showModal: false,
+          selectedSheet: '',
+          monthList: [],
+          lastUpdated: '',
+          searchQuery: '',
+          selectedTeamFilter: 'ALL',
+          expandedVJs: [],
+          executiveSummary: { totalTarget: 0, totalCurrent: 0, progressPct: 0, remainingDeficit: 0, totalVJs: 0 },
+          vjList: [],
+          
+          // Modal State
+          configMode: 'Auto',
+          modalSelectedTeam: 'ALL',
+          modalTeamTarget: 0,
+          modalManualList: []
+        }
+      },
+      computed: {
+        teamList() {
+          const teams = new Set(this.vjList.map(v => v.team));
+          return Array.from(teams).filter(Boolean);
+        },
+        filteredVJs() {
+          return this.vjList.filter(vj => {
+            const matchSearch = vj.name.toLowerCase().includes(this.searchQuery.toLowerCase()) || vj.vjId.toLowerCase().includes(this.searchQuery.toLowerCase());
+            const matchTeam = this.selectedTeamFilter === 'ALL' || vj.team === this.selectedTeamFilter;
+            return matchSearch && matchTeam;
+          });
+        },
+        autoPreviewVJs() {
+          if (this.modalSelectedTeam === 'ALL') return this.vjList;
+          return this.vjList.filter(v => v.team === this.modalSelectedTeam);
+        },
+        autoCalculatedPerVJ() {
+          if (!this.autoPreviewVJs.length || !this.modalTeamTarget) return 0;
+          return Math.round(this.modalTeamTarget / this.autoPreviewVJs.length);
+        }
+      },
+      methods: {
+        formatNum(num) {
+          return (num || 0).toLocaleString();
+        },
+        toggleExpand(vjName) {
+          const idx = this.expandedVJs.indexOf(vjName);
+          if (idx > -1) this.expandedVJs.splice(idx, 1);
+          else this.expandedVJs.push(vjName);
+        },
+        fetchData() {
+          this.loading = true;
+          if (typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run
+              .withSuccessHandler(this.handleDataLoaded)
+              .withFailureHandler(this.handleError)
+              .getKPIDashboardData(this.selectedSheet);
+          } else {
+            this.handleError(new Error('ต้องเปิดหน้านี้ผ่าน Apps Script Web App เพื่อโหลดข้อมูลจริง'));
+          }
+        },
+        handleDataLoaded(res) {
+          this.loading = false;
+          if (res && res.success) {
+            this.selectedSheet = res.sheetName;
+            this.monthList = res.monthList || [res.sheetName];
+            this.executiveSummary = res.executiveSummary;
+            this.vjList = res.vjList;
+            this.lastUpdated = res.lastUpdated;
+          }
+        },
+        handleError(err) {
+          this.loading = false;
+          alert('เกิดข้อผิดพลาด: ' + (err.message || err));
+        },
+        openConfigModal() {
+          this.modalManualList = this.vjList.map(v => ({ name: v.name, team: v.team, target: v.target }));
+          this.showModal = true;
+        },
+        saveKPISettings() {
+          this.saving = true;
+          const payload = {
+            sheetName: this.selectedSheet,
+            mode: this.configMode,
+            teamName: this.modalSelectedTeam,
+            teamTarget: this.modalTeamTarget,
+            vjTargets: this.modalManualList
+          };
+
+          if (typeof google !== 'undefined' && google.script && google.script.run) {
+            withACEAdminSession_(token => {
+              payload.sessionToken = token;
+              google.script.run
+                .withSuccessHandler((res) => {
+                  this.saving = false;
+                  if (res.success) {
+                    this.showModal = false;
+                    this.fetchData();
+                  } else {
+                    alert('ไม่สามารถบันทึกได้: ' + res.error);
+                  }
+                })
+                .withFailureHandler(error => {
+                  this.saving = false;
+                  this.handleError(error);
+                })
+                .saveKPISettings(payload, token);
+            }, error => {
+              this.saving = false;
+              alert(error);
+            });
+          } else {
+            this.saving = false;
+            alert('ต้องเปิดหน้านี้ผ่าน Apps Script Web App เพื่อบันทึกข้อมูล');
+          }
+        }
+      },
+      mounted() {
+        requireACELoginOnStartup_(() => this.fetchData());
+      }
+    }).mount('#app');
+  </script>
+<script>
+function withACEAdminSession_(onReady, onError) {
+  const fail = onError || function(message) { alert(message); };
+  if (!(typeof google !== 'undefined' && google.script && google.script.run)) {
+    fail('ต้องเปิดหน้านี้จาก Apps Script Web App');
+    return;
+  }
+  let stored = '';
+  try { stored = localStorage.getItem('ACE_ADMIN_SESSION_TOKEN') || ''; } catch (error) {}
+  const promptForLogin = function() {
+    const username = window.prompt('ชื่อผู้ใช้ Admin');
+    if (username === null) return fail('ยกเลิกการเข้าสู่ระบบ');
+    const passcode = window.prompt('รหัสผ่าน Admin');
+    if (passcode === null) return fail('ยกเลิกการเข้าสู่ระบบ');
+    google.script.run.withSuccessHandler(function(result) {
+      if (!result || !result.success || !result.token) return fail((result && result.error) || 'เข้าสู่ระบบไม่สำเร็จ');
+      try { localStorage.setItem('ACE_ADMIN_SESSION_TOKEN', result.token); } catch (error) {}
+      onReady(result.token);
+    }).withFailureHandler(function() { fail('ไม่สามารถตรวจสอบบัญชีได้'); }).verifyAdminAccess(passcode, username);
+  };
+  if (!stored) return promptForLogin();
+  google.script.run.withSuccessHandler(function(result) {
+    if (result && result.success) onReady(stored);
+    else {
+      try { localStorage.removeItem('ACE_ADMIN_SESSION_TOKEN'); } catch (error) {}
+      promptForLogin();
+    }
+  }).withFailureHandler(function() { promptForLogin(); }).validateAdminSession(stored);
+}
+</script>
+</body>
+</html> 

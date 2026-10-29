@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ACE KPI Tracking & Report System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Kanit', sans-serif; }
+  </style>
+<?!= include('auth_gate'); ?>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <!-- HEADER & CONTROLS -->
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
+          💎 <span data-i18n="title">ACE KPI TRACKING REPORT</span>
+        </h1>
+        <p class="text-slate-400 text-sm mt-1" id="currentSheetLabel"><span data-i18n="monthLabel">ประจำเดือน</span>: กำลังโหลด...</p>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- MODE SELECTOR -->
+        <select id="viewModeSelect" onchange="toggleViewMode()" class="bg-slate-900 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none border-indigo-500">
+          <option value="single" data-i18n="modeSingle">📊 รายงานประจำเดือน</option>
+          <option value="compare" data-i18n="modeCompare">🔄 เปรียบเทียบระหว่างเดือน</option>
+        </select>
+
+        <!-- LANGUAGE SELECTOR -->
+        <select id="langSelect" onchange="changeLanguage(this.value)" class="bg-slate-900 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none">
+          <option value="th">🇹🇭 ภาษาไทย</option>
+          <option value="en">🇺🇸 English</option>
+          <option value="zh">🇨🇳 中文</option>
+        </select>
+
+        <!-- SINGLE MONTH SELECT -->
+        <div id="singleMonthBox" class="flex items-center gap-2">
+          <select id="sheetSelect" onchange="loadReportData()" class="bg-slate-900 border border-slate-700 text-slate-200 px-3 py-2 rounded-xl text-sm focus:outline-none">
+            <option value="">-- เลือกเดือน --</option>
+          </select>
+        </div>
+
+        <!-- COMPARE MONTHS SELECT -->
+        <div id="compareMonthBox" class="hidden items-center gap-2">
+          <select id="sheetSelect1" class="bg-slate-900 border border-slate-700 text-slate-200 px-2 py-2 rounded-xl text-xs">
+            <option value="">เดือนฐาน (M1)</option>
+          </select>
+          <span class="text-slate-400">VS</span>
+          <select id="sheetSelect2" class="bg-slate-900 border border-slate-700 text-slate-200 px-2 py-2 rounded-xl text-xs">
+            <option value="">เดือนเปรียบเทียบ (M2)</option>
+          </select>
+          <button onclick="loadComparisonData()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-2 rounded-xl font-medium">
+            เปรียบเทียบ
+          </button>
+        </div>
+
+        <!-- EXPORTS -->
+        <button onclick="exportFullExcelReport()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium px-3 py-2 rounded-xl shadow-lg transition flex items-center gap-1">
+          📊 Excel
+        </button>
+        <button onclick="exportFullPDFReport()" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-medium px-3 py-2 rounded-xl shadow-lg transition flex items-center gap-1">
+          📄 PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- OVERVIEW SUMMARY CARDS -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="statsCards">
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="cardTotalDiamonds">ยอด Diamond รวม</span>
+        <div class="text-2xl font-bold text-emerald-400 mt-1" id="lblTotalDiamonds">0 💎</div>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="cardTotalTarget">เป้าหมายรวม (KPI Targets)</span>
+        <div class="text-2xl font-bold text-indigo-400 mt-1" id="lblTotalTarget">0</div>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="cardOverallRate">% ความสำเร็จภาพรวม</span>
+        <div class="text-2xl font-bold text-amber-400 mt-1" id="lblOverallRate">0%</div>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider" data-i18n="cardVJCount">จำนวน VJ ทั้งหมด</span>
+        <div class="text-2xl font-bold text-sky-400 mt-1" id="lblVJCount">0 คน</div>
+      </div>
+    </div>
+
+    <!-- CHARTS SECTION -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="chartsSection">
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-xl">
+        <h3 class="text-md font-bold text-slate-200 mb-4" data-i18n="chartTeamTitle">📊 สรุปผลงานแต่ละทีม</h3>
+        <div class="h-64"><canvas id="teamChart"></canvas></div>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-xl">
+        <h3 class="text-md font-bold text-slate-200 mb-4" data-i18n="chartVJTitle">🏆 Top 10 VJs Performance</h3>
+        <div class="h-64"><canvas id="vjChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- SINGLE MONTH TABLES -->
+    <div id="singleTablesContainer" class="space-y-6">
+      <!-- TEAM SUMMARY TABLE -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          🏆 <span data-i18n="tblTeamHeader">สรุปผลงานแยกตามทีม</span>
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="bg-slate-900/60 text-slate-400 uppercase text-xs">
+              <tr>
+                <th class="p-3" data-i18n="thTeam">สังกัดทีม</th>
+                <th class="p-3 text-center" data-i18n="thVJCount">จำนวน VJ</th>
+                <th class="p-3 text-right" data-i18n="thTotalDiamonds">ยอด Diamond รวม</th>
+                <th class="p-3 text-right" data-i18n="thTotalTarget">เป้าหมายรวม</th>
+                <th class="p-3 text-center" data-i18n="thAchievement">% Achievement</th>
+              </tr>
+            </thead>
+            <tbody id="teamTableBody" class="divide-y divide-slate-700/50">
+              <tr><td colspan="5" class="p-4 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- VJ INDIVIDUAL TABLE -->
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          👤 <span data-i18n="tblVJHeader">สรุปผลงานรายบุคคล (VJ)</span>
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="bg-slate-900/60 text-slate-400 uppercase text-xs">
+              <tr>
+                <th class="p-3 text-center" data-i18n="thRank">ลำดับ</th>
+                <th class="p-3" data-i18n="thVJName">ชื่อ VJ</th>
+                <th class="p-3 text-center" data-i18n="thTeam">สังกัดทีม</th>
+                <th class="p-3 text-right" data-i18n="thTarget">เป้าหมาย (KPI)</th>
+                <th class="p-3 text-right" data-i18n="thActual">ยอดทำได้จริง</th>
+                <th class="p-3 text-right" data-i18n="thDailyAvg">เฉลี่ย/วันทำงาน</th>
+                <th class="p-3 text-center" data-i18n="thAchievement">% Achievement</th>
+                <th class="p-3 text-center" data-i18n="thWorkDays">วันทำงาน</th>
+                <th class="p-3 text-center" data-i18n="thOffDays">วันหยุด (OFF)</th>
+              </tr>
+            </thead>
+            <tbody id="vjTableBody" class="divide-y divide-slate-700/50">
+              <tr><td colspan="9" class="p-4 text-center text-slate-500">กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPARISON MONTH TABLES (HIDDEN BY DEFAULT) -->
+    <div id="compareTablesContainer" class="hidden space-y-6">
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          🔄 <span data-i18n="compareTeamHeader">เปรียบเทียบผลงานทีม (M1 vs M2)</span>
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="bg-slate-900/60 text-slate-400 uppercase text-xs">
+              <tr>
+                <th class="p-3" data-i18n="thTeam">สังกัดทีม</th>
+                <th class="p-3 text-right" id="thM1Team">M1 Diamonds</th>
+                <th class="p-3 text-right" id="thM2Team">M2 Diamonds</th>
+                <th class="p-3 text-right" data-i18n="thDiff">ส่วนต่าง (Diff)</th>
+                <th class="p-3 text-center" data-i18n="thGrowth">% การเติบโต</th>
+              </tr>
+            </thead>
+            <tbody id="compareTeamTableBody" class="divide-y divide-slate-700/50">
+              <tr><td colspan="5" class="p-4 text-center text-slate-500">กรุณาเลือกเดือนที่ต้องการเปรียบเทียบ...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          🔄 <span data-i18n="compareVJHeader">เปรียบเทียบผลงาน VJ (M1 vs M2)</span>
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm text-slate-300">
+            <thead class="bg-slate-900/60 text-slate-400 uppercase text-xs">
+              <tr>
+                <th class="p-3 text-center" data-i18n="thRank">ลำดับ</th>
+                <th class="p-3" data-i18n="thVJName">ชื่อ VJ</th>
+                <th class="p-3 text-center" data-i18n="thTeam">สังกัดทีม</th>
+                <th class="p-3 text-right" id="thM1VJ">M1 Actual</th>
+                <th class="p-3 text-right" id="thM2VJ">M2 Actual</th>
+                <th class="p-3 text-right" data-i18n="thDiff">ส่วนต่าง (Diff)</th>
+                <th class="p-3 text-center" data-i18n="thGrowth">% การเติบโต</th>
+              </tr>
+            </thead>
+            <tbody id="compareVJTableBody" class="divide-y divide-slate-700/50">
+              <tr><td colspan="7" class="p-4 text-center text-slate-500">กรุณาเลือกเดือนที่ต้องการเปรียบเทียบ...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let globalData = null;
+    let compareGlobalData = null;
+    let currentLang = 'th';
+    let teamChartObj = null;
+    let vjChartObj = null;
+
+    // TRANSLATION DICTIONARY
+    const i18nDict = {
+      th: {
+        title: "ACE KPI TRACKING REPORT",
+        monthLabel: "ประจำเดือน",
+        modeSingle: "📊 รายงานประจำเดือน",
+        modeCompare: "🔄 เปรียบเทียบระหว่างเดือน",
+        cardTotalDiamonds: "ยอด Diamond รวม",
+        cardTotalTarget: "เป้าหมายรวม (KPI Targets)",
+        cardOverallRate: "% ความสำเร็จภาพรวม",
+        cardVJCount: "จำนวน VJ ทั้งหมด",
+        chartTeamTitle: "📊 สรุปผลงานแต่ละทีม",
+        chartVJTitle: "🏆 Top 10 VJs Performance",
+        tblTeamHeader: "สรุปผลงานแยกตามทีม",
+        tblVJHeader: "สรุปผลงานรายบุคคล (VJ)",
+        compareTeamHeader: "เปรียบเทียบผลงานทีม (M1 vs M2)",
+        compareVJHeader: "เปรียบเทียบผลงาน VJ (M1 vs M2)",
+        thTeam: "สังกัดทีม",
+        thVJCount: "จำนวน VJ",
+        thTotalDiamonds: "ยอด Diamond รวม",
+        thTotalTarget: "เป้าหมายรวม",
+        thAchievement: "% Achievement",
+        thRank: "ลำดับ",
+        thVJName: "ชื่อ VJ",
+        thTarget: "เป้าหมาย (KPI)",
+        thActual: "ยอดทำได้จริง",
+        thDailyAvg: "เฉลี่ย/วันทำงาน",
+        thWorkDays: "วันทำงาน",
+        thOffDays: "วันหยุด (OFF)",
+        thDiff: "ส่วนต่าง (Diff)",
+        thGrowth: "% การเติบโต"
+      },
+      en: {
+        title: "ACE KPI TRACKING REPORT",
+        monthLabel: "Month",
+        modeSingle: "📊 Monthly Summary",
+        modeCompare: "🔄 Month Comparison",
+        cardTotalDiamonds: "Total Diamonds",
+        cardTotalTarget: "Total Target",
+        cardOverallRate: "Overall Achievement",
+        cardVJCount: "Total VJ Count",
+        chartTeamTitle: "📊 Team Performance Summary",
+        chartVJTitle: "🏆 Top 10 VJs Performance",
+        tblTeamHeader: "Team Performance Breakdown",
+        tblVJHeader: "VJ Individual Performance",
+        compareTeamHeader: "Team Comparison (M1 vs M2)",
+        compareVJHeader: "VJ Comparison (M1 vs M2)",
+        thTeam: "Team",
+        thVJCount: "VJ Count",
+        thTotalDiamonds: "Total Diamonds",
+        thTotalTarget: "Total Target",
+        thAchievement: "% Achievement",
+        thRank: "Rank",
+        thVJName: "VJ Name",
+        thTarget: "Target",
+        thActual: "Actual",
+        thDailyAvg: "Daily Avg",
+        thWorkDays: "Work Days",
+        thOffDays: "OFF Days",
+        thDiff: "Diff",
+        thGrowth: "% Growth"
+      },
+      zh: {
+        title: "ACE KPI 业绩追踪报告",
+        monthLabel: "月份",
+        modeSingle: "📊 月度汇总报告",
+        modeCompare: "🔄 月度对比分析",
+        cardTotalDiamonds: "总 Diamond 数",
+        cardTotalTarget: "总目标数 (KPI)",
+        cardOverallRate: "总体完成率",
+        cardVJCount: "VJ 总人数",
+        chartTeamTitle: "📊 各团队业绩汇总",
+        chartVJTitle: "🏆 Top 10 VJ 业绩排行",
+        tblTeamHeader: "团队业绩明细",
+        tblVJHeader: "VJ 个人业绩明细",
+        compareTeamHeader: "团队业绩对比 (M1 vs M2)",
+        compareVJHeader: "VJ 个人业绩对比 (M1 vs M2)",
+        thTeam: "所属团队",
+        thVJCount: "VJ 人数",
+        thTotalDiamonds: "总 Diamond 数",
+        thTotalTarget: "总目标",
+        thAchievement: "完成率 %",
+        thRank: "排名",
+        thVJName: "VJ 姓名",
+        thTarget: "目标",
+        thActual: "实际完成",
+        thDailyAvg: "日均完成",
+        thWorkDays: "工作天数",
+        thOffDays: "休息天数",
+        thDiff: "差额 (Diff)",
+        thGrowth: "增长率 %"
+      }
+    };
+
+    function changeLanguage(lang) {
+      currentLang = lang;
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (i18nDict[lang] && i18nDict[lang][key]) {
+          el.textContent = i18nDict[lang][key];
+        }
+      });
+      if (globalData) renderDashboard(globalData);
+      if (compareGlobalData) renderComparisonDashboard(compareGlobalData);
+    }
+
+    window.onload = function() {
+      requireACELoginOnStartup_(() => {
+        google.script.run.withSuccessHandler(sheets => {
+          const sel = document.getElementById('sheetSelect');
+          const sel1 = document.getElementById('sheetSelect1');
+          const sel2 = document.getElementById('sheetSelect2');
+          
+          sel.innerHTML = '';
+          sel1.innerHTML = '';
+          sel2.innerHTML = '';
+          
+          sheets.forEach((s, idx) => {
+            const opt = new Option(s, s);
+            sel.add(opt.cloneNode(true));
+            sel1.add(opt.cloneNode(true));
+            sel2.add(opt.cloneNode(true));
+          });
+          
+          if (sheets.length > 1) sel2.selectedIndex = 1;
+          if (sheets.length > 0) loadReportData();
+        }).getSheetList();
+      });
+    };
+
+    function toggleViewMode() {
+      const mode = document.getElementById('viewModeSelect').value;
+      if (mode === 'single') {
+        document.getElementById('singleMonthBox').classList.remove('hidden');
+        document.getElementById('compareMonthBox').classList.add('hidden');
+        document.getElementById('singleTablesContainer').classList.remove('hidden');
+        document.getElementById('compareTablesContainer').classList.add('hidden');
+        if (globalData) renderDashboard(globalData);
+      } else {
+        document.getElementById('singleMonthBox').classList.add('hidden');
+        document.getElementById('compareMonthBox').classList.remove('hidden');
+        document.getElementById('singleTablesContainer').classList.add('hidden');
+        document.getElementById('compareTablesContainer').classList.remove('hidden');
+        loadComparisonData();
+      }
+    }
+
+    function loadReportData() {
+      const sheetName = document.getElementById('sheetSelect').value;
+      google.script.run.withSuccessHandler(res => {
+        if (!res.success) return alert('Error: ' + res.error);
+        globalData = res;
+        renderDashboard(res);
+      }).getMonthlyStatsSummary(sheetName);
+    }
+
+    function loadComparisonData() {
+      const m1 = document.getElementById('sheetSelect1').value;
+      const m2 = document.getElementById('sheetSelect2').value;
+      if (!m1 || !m2) return alert('กรุณาเลือกทั้ง 2 เดือน');
+
+      google.script.run.withSuccessHandler(res => {
+        if (!res.success) return alert('Error: ' + res.error);
+        compareGlobalData = res;
+        renderComparisonDashboard(res);
+      }).getMonthlyComparisonData(m1, m2);
+    }
+
+    function renderDashboard(res) {
+      document.getElementById('currentSheetLabel').innerHTML = `<span data-i18n="monthLabel">${i18nDict[currentLang].monthLabel}</span>: ${res.sheetName}`;
+      document.getElementById('lblTotalDiamonds').textContent = res.summary.totalDiamonds.toLocaleString() + ' 💎';
+      document.getElementById('lblTotalTarget').textContent = res.summary.totalTarget.toLocaleString();
+      document.getElementById('lblOverallRate').textContent = res.summary.overallRate + '%';
+      document.getElementById('lblVJCount').textContent = res.summary.vjCount;
+
+      // Render Team Table
+      const teamBody = document.getElementById('teamTableBody');
+      teamBody.innerHTML = res.teamList.map(t => {
+        const rate = t.totalTarget > 0 ? Math.round((t.totalDiamonds / t.totalTarget) * 100) : 0;
+        return `
+          <tr class="hover:bg-slate-700/30">
+            <td class="p-3 font-semibold text-white">${t.team}</td>
+            <td class="p-3 text-center">${t.vjCount}</td>
+            <td class="p-3 text-right text-emerald-400 font-medium">${t.totalDiamonds.toLocaleString()}</td>
+            <td class="p-3 text-right">${t.totalTarget.toLocaleString()}</td>
+            <td class="p-3 text-center font-bold ${rate >= 100 ? 'text-emerald-400' : 'text-amber-400'}">${rate}%</td>
+          </tr>
+        `;
+      }).join('');
+
+      // Render VJ Table
+      const vjBody = document.getElementById('vjTableBody');
+      vjBody.innerHTML = res.vjList.map((v, i) => `
+        <tr class="hover:bg-slate-700/30">
+          <td class="p-3 text-center font-bold text-slate-400">${i + 1}</td>
+          <td class="p-3 font-semibold text-white flex items-center gap-2">
+            <img src="${v.profilePic}" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(v.name)}&background=6366f1&color=fff';" class="w-8 h-8 rounded-full border border-slate-600 object-cover">
+            <div>
+              <div>${v.name}</div>
+              ${v.tiktokId ? `<div class="text-xs text-slate-400 font-normal">@${v.tiktokId.replace(/^@/,'')}</div>` : ''}
+            </div>
+          </td>
+          <td class="p-3 text-center"><span class="px-2 py-1 bg-slate-700 text-xs rounded-md">${v.team}</span></td>
+          <td class="p-3 text-right text-indigo-300 font-medium">${v.target.toLocaleString()}</td>
+          <td class="p-3 text-right text-emerald-400 font-semibold">${v.actual.toLocaleString()}</td>
+          <td class="p-3 text-right">${v.dailyAvg.toLocaleString()}</td>
+          <td class="p-3 text-center font-bold ${v.rate >= 100 ? 'text-emerald-400' : 'text-amber-400'}">${v.rate}%</td>
+          <td class="p-3 text-center">${v.workDays}</td>
+          <td class="p-3 text-center text-rose-400">${v.leaveDays}</td>
+        </tr>
+      `).join('');
+
+      renderCharts(res.teamList, res.vjList.slice(0, 10));
+    }
+
+    function renderComparisonDashboard(res) {
+      document.getElementById('currentSheetLabel').textContent = `เปรียบเทียบ: ${res.month1} VS ${res.month2}`;
+      
+      const diffTotal = res.summary2.totalDiamonds - res.summary1.totalDiamonds;
+      document.getElementById('lblTotalDiamonds').textContent = res.summary2.totalDiamonds.toLocaleString() + ' 💎';
+      document.getElementById('lblTotalTarget').textContent = (diffTotal >= 0 ? '+' : '') + diffTotal.toLocaleString();
+      document.getElementById('lblOverallRate').textContent = res.summary2.overallRate + '%';
+      document.getElementById('lblVJCount').textContent = res.summary2.vjCount;
+
+      document.getElementById('thM1Team').textContent = `${res.month1} 💎`;
+      document.getElementById('thM2Team').textContent = `${res.month2} 💎`;
+      document.getElementById('thM1VJ').textContent = `${res.month1} Actual`;
+      document.getElementById('thM2VJ').textContent = `${res.month2} Actual`;
+
+      // Render Compare Team Table
+      const cTeamBody = document.getElementById('compareTeamTableBody');
+      cTeamBody.innerHTML = res.teamComparison.map(t => `
+        <tr class="hover:bg-slate-700/30">
+          <td class="p-3 font-semibold text-white">${t.team}</td>
+          <td class="p-3 text-right">${t.m1Diamonds.toLocaleString()}</td>
+          <td class="p-3 text-right text-emerald-400 font-medium">${t.m2Diamonds.toLocaleString()}</td>
+          <td class="p-3 text-right font-bold ${t.diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${(t.diff >= 0 ? '+' : '') + t.diff.toLocaleString()}</td>
+          <td class="p-3 text-center font-bold ${t.growth >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${(t.growth >= 0 ? '+' : '') + t.growth}%</td>
+        </tr>
+      `).join('');
+
+      // Render Compare VJ Table
+      const cVJBody = document.getElementById('compareVJTableBody');
+      cVJBody.innerHTML = res.vjComparison.map((v, i) => `
+        <tr class="hover:bg-slate-700/30">
+          <td class="p-3 text-center font-bold text-slate-400">${i + 1}</td>
+          <td class="p-3 font-semibold text-white flex items-center gap-2">
+            <img src="${v.profilePic}" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(v.name)}&background=6366f1&color=fff';" class="w-8 h-8 rounded-full border border-slate-600 object-cover">
+            ${v.name}
+          </td>
+          <td class="p-3 text-center"><span class="px-2 py-1 bg-slate-700 text-xs rounded-md">${v.team}</span></td>
+          <td class="p-3 text-right">${v.m1Actual.toLocaleString()}</td>
+          <td class="p-3 text-right text-emerald-400 font-semibold">${v.m2Actual.toLocaleString()}</td>
+          <td class="p-3 text-right font-bold ${v.diff >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${(v.diff >= 0 ? '+' : '') + v.diff.toLocaleString()}</td>
+          <td class="p-3 text-center font-bold ${v.growth >= 0 ? 'text-emerald-400' : 'text-rose-400'}">${(v.growth >= 0 ? '+' : '') + v.growth}%</td>
+        </tr>
+      `).join('');
+
+      // Charts for comparison
+      renderCharts(
+        res.teamComparison.map(t => ({ team: t.team, totalDiamonds: t.m2Diamonds, totalTarget: t.m1Diamonds })),
+        res.vjComparison.slice(0, 10).map(v => ({ name: v.name, actual: v.m2Actual, target: v.m1Actual }))
+      );
+    }
+
+    function renderCharts(teamData, vjData) {
+      if (teamChartObj) teamChartObj.destroy();
+      if (vjChartObj) vjChartObj.destroy();
+
+      const ctxTeam = document.getElementById('teamChart').getContext('2d');
+      teamChartObj = new Chart(ctxTeam, {
+        type: 'bar',
+        data: {
+          labels: teamData.map(t => t.team),
+          datasets: [{
+            label: 'Total Diamonds',
+            data: teamData.map(t => t.totalDiamonds),
+            backgroundColor: '#10b981'
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+
+      const ctxVJ = document.getElementById('vjChart').getContext('2d');
+      vjChartObj = new Chart(ctxVJ, {
+        type: 'bar',
+        data: {
+          labels: vjData.map(v => v.name),
+          datasets: [{
+            label: 'Actual Diamonds',
+            data: vjData.map(v => v.actual),
+            backgroundColor: '#6366f1'
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    function exportFullExcelReport() {
+      if (!globalData) return alert('ไม่พบข้อมูลสำหรับ Export');
+      const wb = XLSX.utils.book_new();
+      const summary = globalData.summary;
+      const monthName = globalData.sheetName;
+
+      const sheet1Data = [
+        ["ACE KPI TRACKING - MONTHLY SUMMARY REPORT"],
+        ["ประจำเดือน:", monthName],
+        [],
+        ["รายการสรุปภาพรวม", "จำนวน"],
+        ["ยอด Diamond รวมประจำเดือน", summary.totalDiamonds],
+        ["เป้าหมายรวมประจำเดือน", summary.totalTarget],
+        ["% ความสำเร็จภาพรวม", `${summary.overallRate}%`],
+        ["วันทำงานรวม (วัน)", summary.totalWorkDays],
+        ["วันลารวม (วัน)", summary.totalLeaveDays],
+        [],
+        ["สรุปผลงานแยกตามทีม"],
+        ["สังกัดทีม", "จำนวน VJ", "ยอด Diamond รวม", "เป้าหมายรวม", "% Achievement"]
+      ];
+
+      globalData.teamList.forEach(t => {
+        const rate = t.totalTarget > 0 ? Math.round((t.totalDiamonds / t.totalTarget) * 100) : 0;
+        sheet1Data.push([t.team, t.vjCount, t.totalDiamonds, t.totalTarget, `${rate}%`]);
+      });
+
+      const ws1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+      XLSX.utils.book_append_sheet(wb, ws1, "ภาพรวมและรายทีม");
+
+      const sheet2Data = [
+        ["ลำดับ", "ชื่อ VJ", "TikTok ID", "สังกัดทีม", "เป้าหมาย (KPI)", "ยอดทำได้จริง", "เฉลี่ย/วันทำงาน", "% Achievement", "วันทำงาน", "วันลา"]
+      ];
+
+      globalData.vjList.forEach((v, i) => {
+        sheet2Data.push([i + 1, v.name, v.tiktokId || '-', v.team, v.target, v.actual, v.dailyAvg, `${v.rate}%`, v.workDays, v.leaveDays]);
+      });
+
+      const ws2 = XLSX.utils.aoa_to_sheet(sheet2Data);
+      XLSX.utils.book_append_sheet(wb, ws2, "สรุปรายบุคคล (VJ)");
+
+      const sheet3Header = ["ลำดับ", "ชื่อ VJ", "สังกัดทีม"];
+      for (let d = 1; d <= 31; d++) sheet3Header.push(`วันที่ ${d}`);
+      sheet3Header.push("ยอดรวม 💎");
+
+      const sheet3Data = [sheet3Header];
+      globalData.vjList.forEach((v, i) => {
+        const row = [i + 1, v.name, v.team];
+        v.dailyBreakdown.forEach(val => row.push(val));
+        row.push(v.actual);
+        sheet3Data.push(row);
+      });
+
+      const ws3 = XLSX.utils.aoa_to_sheet(sheet3Data);
+      XLSX.utils.book_append_sheet(wb, ws3, "ยอดรายวัน 31 วัน (Raw Data)");
+
+      XLSX.writeFile(wb, `ACE_KPI_Report_${monthName.replace(/\s+/g, '_')}.xlsx`);
+    }
+
+    function exportFullPDFReport() {
+      if (!globalData) return alert('ไม่พบข้อมูลสำหรับ Export');
+      const printWin = window.open('', '_blank');
+      const summary = globalData.summary;
+      const monthName = globalData.sheetName;
+
+      let teamRows = globalData.teamList.map(t => {
+        const rate = t.totalTarget > 0 ? Math.round((t.totalDiamonds / t.totalTarget) * 100) : 0;
+        return `
+          <tr>
+            <td style="padding: 6px;">${t.team}</td>
+            <td style="text-align: center;">${t.vjCount}</td>
+            <td style="text-align: right;">${t.totalDiamonds.toLocaleString()}</td>
+            <td style="text-align: right;">${t.totalTarget.toLocaleString()}</td>
+            <td style="text-align: center; font-weight: bold;">${rate}%</td>
+          </tr>
+        `;
+      }).join('');
+
+      let vjRows = globalData.vjList.map((v, i) => `
+        <tr>
+          <td style="text-align: center;">${i + 1}</td>
+          <td><b>${v.name}</b> ${v.tiktokId ? `<small style="color:#64748b;">(@${v.tiktokId.replace(/^@/,'')})</small>` : ''}</td>
+          <td style="text-align: center;">${v.team}</td>
+          <td style="text-align: right;">${v.target.toLocaleString()}</td>
+          <td style="text-align: right; font-weight: bold; color: #059669;">${v.actual.toLocaleString()}</td>
+          <td style="text-align: right;">${v.dailyAvg.toLocaleString()}</td>
+          <td style="text-align: center; font-weight: bold;">${v.rate}%</td>
+          <td style="text-align: center;">${v.workDays} วัน</td>
+          <td style="text-align: center; color: #e11d48;">${v.leaveDays} วัน</td>
+        </tr>
+      `).join('');
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>ACE KPI Report - ${monthName}</title>
+          <style>
+            body { font-family: 'Sarabun', sans-serif; padding: 20px; color: #1e293b; }
+            h1 { text-align: center; margin-bottom: 4px; font-size: 20px; }
+            .subtitle { text-align: center; color: #64748b; font-size: 13px; margin-bottom: 20px; }
+            .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+            .card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px; text-align: center; }
+            .card-val { font-size: 16px; font-weight: bold; color: #0f172a; margin-top: 4px; }
+            .card-lbl { font-size: 11px; color: #64748b; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }
+            th, td { border: 1px solid #cbd5e1; padding: 6px; }
+            th { background: #f1f5f9; text-align: center; font-weight: bold; }
+            @media print { @page { size: A4 landscape; margin: 8mm; } }
+          </style>
+        </head>
+        <body>
+          <h1>ACE KPI TRACKING REPORT</h1>
+          <div class="subtitle">รายงานสรุปผลงานประจำเดือน: ${monthName}</div>
+
+          <div class="grid">
+            <div class="card"><div class="card-lbl">ยอด Diamond รวม</div><div class="card-val" style="color:#059669;">${summary.totalDiamonds.toLocaleString()} 💎</div></div>
+            <div class="card"><div class="card-lbl">เป้าหมายรวม</div><div class="card-val">${summary.totalTarget.toLocaleString()}</div></div>
+            <div class="card"><div class="card-lbl">% ความสำเร็จภาพรวม</div><div class="card-val">${summary.overallRate}%</div></div>
+            <div class="card"><div class="card-lbl">จำนวน VJ ทั้งหมด</div><div class="card-val">${summary.vjCount} คน</div></div>
+          </div>
+
+          <h3>📊 สรุปผลงานแยกตามทีม</h3>
+          <table>
+            <thead>
+              <tr><th>สังกัดทีม</th><th>จำนวน VJ</th><th>ยอด Diamond รวม</th><th>เป้าหมายรวม</th><th>% Achievement</th></tr>
+            </thead>
+            <tbody>${teamRows}</tbody>
+          </table>
+
+          <h3>👤 สรุปผลงานรายบุคคล (VJ)</h3>
+          <table>
+            <thead>
+              <tr><th>ลำดับ</th><th>ชื่อ VJ</th><th>สังกัดทีม</th><th>เป้าหมาย (KPI)</th><th>ยอดทำได้จริง</th><th>เฉลี่ย/วันทำงาน</th><th>% Achievement</th><th>วันทำงาน</th><th>วันหยุด (OFF)</th></tr>
+            </thead>
+            <tbody>${vjRows}</tbody>
+          </table>
+
+          <script>
+            window.onload = function() { window.print(); window.onafterprint = function() { window.close(); }; };
+          <\/script>
+        </body>
+        </html>
+      `;
+
+      printWin.document.write(html);
+      printWin.document.close();
+    }
+  </script>
+</body>
+</html>

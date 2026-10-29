@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACE Tracking — VJ Bonus System</title>
+
+  <!-- Tailwind CSS & FontAwesome Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Prompt', sans-serif; }
+    .tier-badge-0 { background-color: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+    .tier-badge-1 { background-color: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+    .tier-badge-2 { background-color: #dcfce7; color: #166534; border: 1px solid #86efac; }
+    .tier-badge-3 { background-color: #fef3c7; color: #92400e; border: 1px solid #fde047; }
+    .tier-badge-4 { background-color: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
+    .tier-badge-max { background-image: linear-gradient(135deg, #ec4899, #8b5cf6); color: #ffffff; }
+  </style>
+<?!= include('auth_gate'); ?>
+</head>
+
+<body class="bg-slate-900 text-slate-100 min-h-screen pb-12">
+
+  <!-- Header Control Bar -->
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-30 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        
+        <!-- Logo & Title -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shadow-md">
+            <i class="fa-solid fa-gem text-amber-300 text-xl"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-white flex items-center gap-2">
+              ACE Tracking — VJ Bonus System
+            </h1>
+            <p class="text-xs text-slate-400">คำนวณโบนัส VJ รายวัน (Tier Bonus) และสรุปสะสมรายเดือน</p>
+          </div>
+        </div>
+
+        <!-- Sheet Selector & Filters -->
+        <div class="flex flex-wrap items-center gap-3">
+          <div>
+            <label class="block text-[10px] text-slate-400 mb-0.5">เลือกชีตเดือน</label>
+            <select id="sheetSelect" onchange="loadVJBonusData()" class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <!-- Populated by GAS -->
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-slate-400 mb-0.5">เลือกวันที่</label>
+            <input type="date" id="dateInput" onchange="loadVJBonusData()" class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+
+          <div>
+            <label class="block text-[10px] text-slate-400 mb-0.5">ค้นหา VJ / ทีม</label>
+            <div class="relative">
+              <input type="text" id="searchInput" oninput="applySearchFilter()" placeholder="ค้นหาชื่อ VJ..." class="bg-slate-700 border border-slate-600 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 w-36 sm:w-44">
+              <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-xs"></i>
+            </div>
+          </div>
+
+          <button onclick="loadVJBonusData()" class="mt-4 sm:mt-0 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-rotate-right"></i> รีเฟรช
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
+
+    <!-- KPI Summary Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <!-- Card 1: Daily Diamonds Total -->
+      <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700/60 shadow-md flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-400">ยอดไดมอนด์รวมวันนี้</p>
+          <h3 id="statDailyDiamonds" class="text-2xl font-bold text-cyan-400 mt-1">0 💎</h3>
+          <p class="text-[11px] text-slate-400 mt-1" id="statVJsCount">0 คนที่มีผลงาน</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 text-2xl">
+          <i class="fa-solid fa-gem"></i>
+        </div>
+      </div>
+
+      <!-- Card 2: Daily Bonus Paid -->
+      <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700/60 shadow-md flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-400">โบนัสรายวันจ่ายรวมวันนี้</p>
+          <h3 id="statDailyBonus" class="text-2xl font-bold text-emerald-400 mt-1">฿0</h3>
+          <p class="text-[11px] text-slate-400 mt-1">ตามเกณฑ์ Tier รายวัน</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-2xl">
+          <i class="fa-solid fa-sack-dollar"></i>
+        </div>
+      </div>
+
+      <!-- Card 3: Qualifying VJs Today -->
+      <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700/60 shadow-md flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-400">VJ ผ่านเกณฑ์วันนี้ (>=30k)</p>
+          <h3 id="statQualifyingVJs" class="text-2xl font-bold text-amber-400 mt-1">0 คน</h3>
+          <p class="text-[11px] text-slate-400 mt-1">ได้รับโบนัส Tier รายวัน</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 text-2xl">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+      </div>
+
+      <!-- Card 4: Monthly Bonus Total -->
+      <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700/60 shadow-md flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-slate-400">โบนัสสะสมทั้งเดือนรวม</p>
+          <h3 id="statMonthlyBonus" class="text-2xl font-bold text-purple-400 mt-1">฿0</h3>
+          <p class="text-[11px] text-slate-400 mt-1">เฉพาะวันที่ผ่านเกณฑ์</p>
+        </div>
+        <div class="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 text-2xl">
+          <i class="fa-solid fa-trophy"></i>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="border-b border-slate-700 flex space-x-4">
+      <button id="btnTabDaily" onclick="switchTab('daily')" class="pb-3 text-sm font-semibold border-b-2 border-indigo-500 text-indigo-400 flex items-center gap-2">
+        <i class="fa-solid fa-calendar-day"></i> โบนัส VJ รายวัน (Daily Bonus Tier)
+      </button>
+      <button id="btnTabMonthly" onclick="switchTab('monthly')" class="pb-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2">
+        <i class="fa-solid fa-award text-amber-400"></i> สรุปผลสะสมรายเดือน (Monthly Summary)
+      </button>
+    </div>
+
+    <!-- TAB 1: Daily Bonus View -->
+    <div id="tabDaily" class="space-y-4">
+      <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
+        <div class="p-4 bg-slate-800/80 border-b border-slate-700 flex justify-between items-center">
+          <h2 class="text-sm font-semibold text-white flex items-center gap-2">
+            <i class="fa-solid fa-list text-indigo-400"></i> ตารางคำนวณโบนัสรายวัน VJ 
+            <span id="selectedDateLabel" class="text-xs text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20"></span>
+          </h2>
+          <span class="text-xs text-slate-400">เงื่อนไข: ยอด 30,000 💎 = 300 บาท (+300 บาท ทุกๆ 30k)</span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900/80 text-slate-400 uppercase text-[11px] tracking-wider">
+              <tr>
+                <th class="py-3 px-4">อันดับ</th>
+                <th class="py-3 px-4">รูป & ชื่อ VJ</th>
+                <th class="py-3 px-4">สังกัดทีม</th>
+                <th class="py-3 px-4 text-right">ไดมอนด์รายวัน</th>
+                <th class="py-3 px-4 text-center">ระดับ Tier</th>
+                <th class="py-3 px-4 text-right">โบนัสรายวัน (บาท)</th>
+                <th class="py-3 px-4">ขาดอีก (เพื่อ Tier ถัดไป)</th>
+                <th class="py-3 px-4 text-center">วันผ่านเกณฑ์สะสม</th>
+                <th class="py-3 px-4 text-right">โบนัสสะสมเดือนนี้</th>
+              </tr>
+            </thead>
+            <tbody id="dailyBonusTbody" class="divide-y divide-slate-700/50">
+              <!-- JS rendered -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Monthly Summary View -->
+    <div id="tabMonthly" class="hidden space-y-4">
+      <div class="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden shadow-xl">
+        <div class="p-4 bg-slate-800/80 border-b border-slate-700 flex justify-between items-center">
+          <h2 class="text-sm font-semibold text-white flex items-center gap-2">
+            <i class="fa-solid fa-trophy text-amber-400"></i> ตารางสรุปเงินโบนัสสะสมประจำเดือน
+          </h2>
+          <span class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+            นับเฉพาะวันที่ยอด >= 30,000 💎 เท่านั้น
+          </span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900/80 text-slate-400 uppercase text-[11px] tracking-wider">
+              <tr>
+                <th class="py-3 px-4">อันดับเดือน</th>
+                <th class="py-3 px-4">รูป & ชื่อ VJ</th>
+                <th class="py-3 px-4">สังกัดทีม</th>
+                <th class="py-3 px-4 text-right">ไดมอนด์รวมทั้งเดือน</th>
+                <th class="py-3 px-4 text-center">จำนวนวันผ่านเกณฑ์ (>=30k)</th>
+                <th class="py-3 px-4 text-right">โบนัสสะสมรวมทั้งเดือน</th>
+                <th class="py-3 px-4 text-center">สถานะสิทธิ์</th>
+              </tr>
+            </thead>
+            <tbody id="monthlyBonusTbody" class="divide-y divide-slate-700/50">
+              <!-- JS rendered -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading Spinner Overlay -->
+    <div id="loadingOverlay" class="hidden fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+      <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+      <p class="text-sm text-slate-200 font-medium">กำลังโหลดข้อมูล VJ Bonus...</p>
+    </div>
+
+  </main>
+
+  <script>
+    var globalDailyList = [];
+    var globalMonthlyList = [];
+
+    window.addEventListener('DOMContentLoaded', function() {
+      var today = new Date().toISOString().split('T')[0];
+      document.getElementById('dateInput').value = today;
+
+      requireACELoginOnStartup_(function() {
+        google.script.run
+          .withSuccessHandler(populateSheetsDropdown)
+          .withFailureHandler(function(err) { console.error(err); })
+          .getSheetList();
+      });
+    });
+
+    function populateSheetsDropdown(res) {
+      var select = document.getElementById('sheetSelect');
+      select.innerHTML = '';
+
+      if (res && res.success && res.sheetNames && res.sheetNames.length > 0) {
+        res.sheetNames.forEach(function(name) {
+          var opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          select.appendChild(opt);
+        });
+      } else {
+        var opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'ไม่พบแผ่นงาน';
+        select.appendChild(opt);
+      }
+
+      loadVJBonusData();
+    }
+
+    function loadVJBonusData() {
+      var sheetName = document.getElementById('sheetSelect').value;
+      var dateStr = document.getElementById('dateInput').value;
+
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+
+      google.script.run
+        .withSuccessHandler(onDataLoaded)
+        .withFailureHandler(onDataError)
+        .getVJBonusPayload(sheetName, dateStr);
+    }
+
+    function onDataLoaded(res) {
+      document.getElementById('loadingOverlay').classList.add('hidden');
+
+      if (!res || !res.success) {
+        alert('เกิดข้อผิดพลาด: ' + (res ? res.error : 'ไม่พบข้อมูล'));
+        return;
+      }
+
+      var summary = res.summary || {};
+      globalDailyList = res.dailyVJList || [];
+      globalMonthlyList = res.monthlyVJSummaryList || [];
+
+      document.getElementById('statDailyDiamonds').textContent = (summary.totalDailyDiamonds || 0).toLocaleString() + ' 💎';
+      document.getElementById('statVJsCount').textContent = (summary.totalVJsCount || 0) + ' คนที่มีผลงาน';
+      document.getElementById('statDailyBonus').textContent = '฿' + (summary.totalDailyBonus || 0).toLocaleString();
+      document.getElementById('statQualifyingVJs').textContent = (summary.totalQualifyingVJsToday || 0) + ' คน';
+      document.getElementById('statMonthlyBonus').textContent = '฿' + (summary.totalMonthlyBonusAllVJ || 0).toLocaleString();
+
+      document.getElementById('selectedDateLabel').textContent = 'วันที่ ' + res.selectedDay;
+
+      renderDailyTable(globalDailyList);
+      renderMonthlyTable(globalMonthlyList);
+    }
+
+    function onDataError(err) {
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      alert('ล้มเหลวในการเชื่อมต่อเซิร์ฟเวอร์: ' + err);
+    }
+
+    function renderDailyTable(list) {
+      var tbody = document.getElementById('dailyBonusTbody');
+      tbody.innerHTML = '';
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-slate-500">ไม่พบข้อมูล VJ ในวันที่เลือก</td></tr>';
+        return;
+      }
+
+      list.forEach(function(item) {
+        var tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-700/40 transition border-b border-slate-700/40';
+
+        var tierBadgeClass = 'tier-badge-0';
+        if (item.tierLevel === 1) tierBadgeClass = 'tier-badge-1';
+        else if (item.tierLevel === 2) tierBadgeClass = 'tier-badge-2';
+        else if (item.tierLevel === 3) tierBadgeClass = 'tier-badge-3';
+        else if (item.tierLevel >= 4) tierBadgeClass = 'tier-badge-4';
+
+        var fallbackUrl = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(item.name) + '&background=6366f1&color=ffffff&bold=true';
+        var avatarSrc = item.avatar || fallbackUrl;
+
+        var html = '';
+        html += '<td class="py-3 px-4 font-bold text-slate-400">#' + item.rank + '</td>';
+        html += '<td class="py-3 px-4">';
+        html += '  <div class="flex items-center space-x-3">';
+        html += '    <img src="' + avatarSrc + '" onerror="this.onerror=null; this.src=\'' + fallbackUrl + '\';" class="w-9 h-9 rounded-full object-cover border border-indigo-500/40 shadow">';
+        html += '    <div><div class="font-semibold text-white">' + escapeHtml(item.name) + '</div></div>';
+        html += '  </div>';
+        html += '</td>';
+        html += '<td class="py-3 px-4"><span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-[11px]">' + escapeHtml(item.team) + '</span></td>';
+        html += '<td class="py-3 px-4 text-right font-bold text-cyan-300">' + item.dailyDiamonds.toLocaleString() + ' 💎</td>';
+        html += '<td class="py-3 px-4 text-center"><span class="px-2.5 py-1 rounded-full text-[11px] font-semibold ' + tierBadgeClass + '">' + escapeHtml(item.tierText) + '</span></td>';
+        html += '<td class="py-3 px-4 text-right font-bold ' + (item.dailyBonus > 0 ? 'text-emerald-400 text-sm' : 'text-slate-500') + '">฿' + item.dailyBonus.toLocaleString() + '</td>';
+        html += '<td class="py-3 px-4 text-xs text-slate-400">' + (item.neededNextTier > 0 ? ('อีก ' + item.neededNextTier.toLocaleString() + ' 💎') : '<span class="text-amber-400">สูงสุด Tier ปัจจุบัน</span>') + '</td>';
+        html += '<td class="py-3 px-4 text-center"><span class="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-full font-semibold">' + item.monthlyQualifyingDays + ' วัน</span></td>';
+        html += '<td class="py-3 px-4 text-right font-semibold text-purple-300">฿' + item.monthlyBonus.toLocaleString() + '</td>';
+
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderMonthlyTable(list) {
+      var tbody = document.getElementById('monthlyBonusTbody');
+      tbody.innerHTML = '';
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-slate-500">ไม่พบข้อมูลสรุปรายเดือน</td></tr>';
+        return;
+      }
+
+      list.forEach(function(item) {
+        var tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-700/40 transition border-b border-slate-700/40';
+
+        var fallbackUrl = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(item.name) + '&background=6366f1&color=ffffff&bold=true';
+        var avatarSrc = item.avatar || fallbackUrl;
+
+        var rankDisplay = item.rank === 1 ? '🥇 1' : item.rank === 2 ? '🥈 2' : item.rank === 3 ? '🥉 3' : '#' + item.rank;
+        var rankClass = item.rank <= 3 ? 'text-amber-400 text-base font-bold' : 'text-slate-400 font-bold';
+
+        var html = '';
+        html += '<td class="py-3 px-4 ' + rankClass + '">' + rankDisplay + '</td>';
+        html += '<td class="py-3 px-4">';
+        html += '  <div class="flex items-center space-x-3">';
+        html += '    <img src="' + avatarSrc + '" onerror="this.onerror=null; this.src=\'' + fallbackUrl + '\';" class="w-9 h-9 rounded-full object-cover border border-purple-500/40 shadow">';
+        html += '    <div class="font-semibold text-white">' + escapeHtml(item.name) + '</div>';
+        html += '  </div>';
+        html += '</td>';
+        html += '<td class="py-3 px-4"><span class="bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-[11px]">' + escapeHtml(item.team) + '</span></td>';
+        html += '<td class="py-3 px-4 text-right font-bold text-cyan-300">' + item.monthlyDiamonds.toLocaleString() + ' 💎</td>';
+        html += '<td class="py-3 px-4 text-center"><span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full font-bold text-xs">' + item.qualifyingDays + ' วัน</span></td>';
+        html += '<td class="py-3 px-4 text-right font-bold text-purple-300 text-sm">฿' + item.monthlyBonus.toLocaleString() + '</td>';
+        
+        if (item.monthlyBonus > 0) {
+          html += '<td class="py-3 px-4 text-center"><span class="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded text-[11px]"><i class="fa-solid fa-check"></i> ผ่านเกณฑ์รับโบนัส</span></td>';
+        } else {
+          html += '<td class="py-3 px-4 text-center"><span class="bg-slate-700 text-slate-400 px-2.5 py-0.5 rounded text-[11px]">ไม่ผ่านเกณฑ์</span></td>';
+        }
+
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function switchTab(tab) {
+      var tabDaily = document.getElementById('tabDaily');
+      var tabMonthly = document.getElementById('tabMonthly');
+      var btnDaily = document.getElementById('btnTabDaily');
+      var btnMonthly = document.getElementById('btnTabMonthly');
+
+      if (tab === 'daily') {
+        tabDaily.classList.remove('hidden');
+        tabMonthly.classList.add('hidden');
+        btnDaily.className = "pb-3 text-sm font-semibold border-b-2 border-indigo-500 text-indigo-400 flex items-center gap-2";
+        btnMonthly.className = "pb-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2";
+      } else {
+        tabDaily.classList.add('hidden');
+        tabMonthly.classList.remove('hidden');
+        btnMonthly.className = "pb-3 text-sm font-semibold border-b-2 border-purple-500 text-purple-400 flex items-center gap-2";
+        btnDaily.className = "pb-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2";
+      }
+    }
+
+    function applySearchFilter() {
+      var q = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      var filteredDaily = globalDailyList.filter(function(item) {
+        return item.name.toLowerCase().indexOf(q) !== -1 || item.team.toLowerCase().indexOf(q) !== -1;
+      });
+      renderDailyTable(filteredDaily);
+
+      var filteredMonthly = globalMonthlyList.filter(function(item) {
+        return item.name.toLowerCase().indexOf(q) !== -1 || item.team.toLowerCase().indexOf(q) !== -1;
+      });
+      renderMonthlyTable(filteredMonthly);
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>

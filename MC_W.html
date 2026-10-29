@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACE Tracking - MC Schedule & Bonus Calculator</title>
+
+  <!-- Tailwind CSS & Fonts & Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Export Engines (Excel, PDF & Chart.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+      background: #0f172a;
+      background-image: radial-gradient(at 50% 0%, #1e1b4b 0px, transparent 75%), radial-gradient(at 0% 100%, #0f172a 0px, transparent 50%);
+      background-attachment: fixed;
+      min-height: 100vh;
+      color: #f8fafc;
+    }
+
+    .glass-card {
+      background: rgba(30, 41, 59, 0.75);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .glass-card-hover:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+      box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.15);
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+
+    .badge-substitute {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: #ffffff;
+      animation: pulseGlow 2s infinite;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.9; transform: scale(1.02); }
+    }
+  </style>
+<?!= include('auth_gate'); ?>
+</head>
+
+<body class="antialiased flex flex-col selection:bg-indigo-500 selection:text-white custom-scrollbar">
+
+  <!-- HEADER NAVIGATION -->
+  <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50 px-4 lg:px-8 py-3.5">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-indigo-500/30">
+          🎙️
+        </div>
+        <div>
+          <h1 class="font-black text-lg text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-200 to-indigo-300" id="ui-title">
+            ACE Tracking — MC Schedule & Bonus Module
+          </h1>
+          <p class="text-xs text-slate-400 font-medium" id="ui-subtitle">ตารางงาน MC & ระบบคำนวณโบนัสประจำวัน</p>
+        </div>
+      </div>
+
+      <!-- Controls & Language Selector -->
+      <div class="flex items-center space-x-3 w-full sm:w-auto justify-end">
+        <select id="lang-select" onchange="switchLanguage(this.value)" class="bg-slate-800 text-xs text-slate-200 font-bold px-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="th">🇹🇭 ไทย (TH)</option>
+          <option value="zh">🇨🇳 中文 (ZH)</option>
+        </select>
+
+        <button onclick="loadModuleData()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition shadow-md shadow-indigo-600/30 active:scale-95 flex items-center space-x-1.5">
+          <i class="fa-solid fa-arrows-rotate" id="refresh-icon"></i>
+          <span id="ui-btn-refresh">รีเฟรชข้อมูล</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- TABS BAR -->
+    <div class="max-w-7xl mx-auto flex items-center space-x-2 mt-4 pt-2 border-t border-slate-800/80">
+      <button id="tab-btn-schedule" onclick="switchTab('schedule')" class="px-4 py-2 rounded-xl text-xs font-extrabold transition bg-indigo-600 text-white shadow-md">
+        <i class="fa-solid fa-calendar-days mr-1.5"></i><span id="ui-tab-sch">🎙️ ตารางงาน MC</span>
+      </button>
+      <button id="tab-btn-bonus" onclick="switchTab('bonus')" class="px-4 py-2 rounded-xl text-xs font-extrabold transition bg-slate-800 text-slate-400 hover:bg-slate-700">
+        <i class="fa-solid fa-calculator mr-1.5"></i><span id="ui-tab-bonus">💰 คำนวณ Bonus MC</span>
+      </button>
+      <button id="tab-btn-simulator" onclick="switchTab('simulator')" class="px-4 py-2 rounded-xl text-xs font-extrabold transition bg-slate-800 text-slate-400 hover:bg-slate-700">
+        <i class="fa-solid fa-wand-magic-sparkles mr-1.5"></i><span id="ui-tab-sim">⚡ เครื่องมือคำนวณเล่น (Simulator)</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+
+    <!-- SECTION 1: MC SCHEDULE -->
+    <section id="section-schedule" class="space-y-6">
+      
+      <!-- Filters & Actions Bar -->
+      <div class="glass-card p-4 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <!-- ตัวเลือกสัปดาห์สำหรับกรองข้อมูลอัตโนมัติ -->
+            <div>
+              <label class="block text-[11px] text-slate-400 font-bold mb-1">เลือกสัปดาห์:</label>
+              <select id="select-week" onchange="filterByWeek(this.value)" class="bg-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-700 text-amber-300 font-bold focus:outline-none focus:ring-2 focus:ring-amber-400">
+                <option value="all">แสดงทุกสัปดาห์ (ทั้งเดือน)</option>
+                <option value="1">สัปดาห์ที่ 1 (วันที่ 1 - 7)</option>
+                <option value="2">สัปดาห์ที่ 2 (วันที่ 8 - 14)</option>
+                <option value="3">สัปดาห์ที่ 3 (วันที่ 15 - 21)</option>
+                <option value="4">สัปดาห์ที่ 4 (วันที่ 22 - 28)</option>
+                <option value="5">สัปดาห์ที่ 5 (วันที่ 29 เป็นต้นไป)</option>
+              </select>
+            </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 font-bold mb-1" id="ui-filter-mc">ค้นหาชื่อ MC</label>
+            <input type="text" id="filter-mc-name" placeholder="กรอกชื่อ MC..." oninput="fetchSchedules()" class="bg-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-700 text-white w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-400 font-bold mb-1" id="ui-filter-team">ค้นหาทีม</label>
+            <input type="text" id="filter-team-name" placeholder="กรอกชื่อทีม..." oninput="fetchSchedules()" class="bg-slate-900 text-xs px-3 py-2 rounded-xl border border-slate-700 text-white w-40 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+
+        <button onclick="openScheduleModal()" class="bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center space-x-2">
+          <i class="fa-solid fa-plus"></i>
+          <span id="ui-btn-add-sch">เพิ่ม/แก้ไข ตารางงาน MC</span>
+        </button>
+      </div>
+
+      <!-- Schedule Table -->
+      <div class="glass-card rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="bg-slate-800/80 text-slate-300 font-bold border-b border-slate-700">
+                <th class="p-3.5" id="th-date">วันที่</th>
+                <th class="p-3.5" id="th-mc">ชื่อ MC</th>
+                <th class="p-3.5" id="th-team">ห้อง/ทีม ปฏิบัติงาน</th>
+                <th class="p-3.5" id="th-shift">กะเวลา (Shift)</th>
+                <th class="p-3.5" id="th-type">สถานะการทำงาน</th>
+                <th class="p-3.5" id="th-notes">หมายเหตุ</th>
+              </tr>
+            </thead>
+            <tbody id="schedule-table-body" class="divide-y divide-slate-800 text-slate-200">
+              <tr>
+                <td colspan="6" class="p-8 text-center text-slate-500 font-medium">กำลังโหลดตารางงาน...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- SECTION 2: MC BONUS CALCULATOR & REPORT -->
+    <section id="section-bonus" class="space-y-6 hidden">
+      
+      <!-- Date Picker & Summary Cards -->
+      <div class="glass-card p-5 rounded-2xl flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-3">
+          <label class="text-xs font-bold text-amber-300" id="ui-label-select-day">เลือกวันที่คำนวณ:</label>
+          <input type="number" id="bonus-select-day" min="1" max="31" class="bg-slate-900 border border-amber-500/40 text-amber-300 font-black text-sm px-3.5 py-1.5 rounded-xl w-20 text-center focus:outline-none focus:ring-2 focus:ring-amber-400">
+          <button onclick="fetchBonusReport()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs px-4 py-2 rounded-xl transition shadow-md active:scale-95" id="ui-btn-calc">คำนวณโบนัส</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-slate-400 font-bold">เลือกเดือน:</label>
+          <input type="month" id="month-picker" onchange="loadMonthlySummary(this.value)" 
+                class="bg-slate-900 text-amber-300 text-xs px-3 py-1.5 rounded-xl border border-slate-700 font-bold focus:outline-none">
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-md">
+            <i class="fa-solid fa-file-excel"></i>
+            <span>Export Excel</span>
+          </button>
+          <button onclick="exportToPDF()" class="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center space-x-1.5 shadow-md">
+            <i class="fa-solid fa-file-pdf"></i>
+            <span>Export PDF</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Summary Stat Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-amber-400">
+          <p class="text-[11px] text-slate-400 font-bold uppercase" id="card-label-daily-bonus">โบนัส MC รวมประจำวัน</p>
+          <h3 class="text-2xl font-black text-amber-400 mt-1" id="stat-daily-bonus">฿0</h3>
+        </div>
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-indigo-500">
+          <p class="text-[11px] text-slate-400 font-bold uppercase" id="card-label-daily-diamonds">ยอด Diamond รวมประจำวัน</p>
+          <h3 class="text-2xl font-black text-indigo-300 mt-1" id="stat-daily-diamonds">0 💎</h3>
+        </div>
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-emerald-500">
+          <p class="text-[11px] text-slate-400 font-bold uppercase" id="card-label-active-mc">MC ที่ปฏิบัติงานวันนี้</p>
+          <h3 class="text-2xl font-black text-emerald-400 mt-1" id="stat-active-mc">0 คน</h3>
+        </div>
+        <div class="glass-card p-4 rounded-2xl border-l-4 border-purple-500">
+          <p class="text-[11px] text-slate-400 font-bold uppercase" id="card-label-monthly-bonus">ยอดโบนัสสะสมทั้งเดือน</p>
+          <h3 class="text-2xl font-black text-purple-300 mt-1" id="stat-monthly-bonus">฿0</h3>
+        </div>
+      </div>
+
+      <!-- Analytics Charts Section -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass-card p-4 rounded-2xl">
+          <h4 class="text-xs font-bold text-slate-300 mb-3 flex items-center space-x-2">
+            <i class="fa-solid fa-chart-column text-indigo-400"></i>
+            <span id="chart-title-top-mc">Top 5 MC Bonus Daily (อันดับโบนัสสูงสุดประจำวัน)</span>
+          </h4>
+          <div class="h-60">
+            <canvas id="chartTopMCBonus"></canvas>
+          </div>
+        </div>
+
+        <div class="glass-card p-4 rounded-2xl">
+          <h4 class="text-xs font-bold text-slate-300 mb-3 flex items-center space-x-2">
+            <i class="fa-solid fa-chart-pie text-purple-400"></i>
+            <span id="chart-title-team-share">Team Diamond Share (สัดส่วนยอดทีม)</span>
+          </h4>
+          <div class="h-60 flex items-center justify-center">
+            <canvas id="chartTeamShare"></canvas>
+          </div>
+        </div>
+      </div>
+      <!-- การ์ดสรุปยอดโบนัสสะสมประจำเดือน -->
+      <!-- การ์ดสรุปยอดโบนัสสะสมประจำเดือน (แสดงทุกคน) -->
+      <div class="bg-[#111827] border border-slate-800 rounded-3xl p-4 w-full max-w-md shadow-2xl">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-3 px-1">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">🏆</span>
+            <h3 class="text-white text-sm font-bold tracking-wide">ยอดโบนัสสะสมประจำเดือน (Monthly MC Total)</h3>
+          </div>
+          <span id="mc-total-count" class="text-[11px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-bold">0 คน</span>
+        </div>
+
+        <!-- ตาราง + พื้นที่ สโครลล์ (max-h ตั้งค่าความสูงตามต้องการ) -->
+        <div class="overflow-y-auto max-h-[480px] rounded-2xl border border-slate-700/60 custom-scrollbar">
+          <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 z-10">
+              <tr class="bg-[#1e293b] text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+                <th class="py-2.5 px-4">MC</th>
+                <th class="py-2.5 px-4 text-center">มาจัด (วัน)</th>
+                <th class="py-2.5 px-4 text-right">โบนัสสะสม</th>
+              </tr>
+            </thead>
+            <tbody id="monthly-summary-body" class="bg-[#f1f5f9] text-slate-800 text-xs divide-y divide-slate-300">
+              <!-- รายชื่อ MC ทั้งหมดจะถูกเพิ่มตรงนี้ผ่าน JS -->
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+      <!-- Daily Bonus Table -->
+      <div id="pdf-export-content" class="glass-card rounded-2xl overflow-hidden shadow-xl p-2">
+        <div class="p-3 border-b border-slate-700/80 flex items-center justify-between">
+          <h3 class="text-xs font-bold text-slate-200" id="table-title-daily">ตารางรายละเอียดโบนัส MC ประจำวัน</h3>
+        </div>
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr class="bg-slate-800/80 text-slate-300 font-bold border-b border-slate-700">
+                <th class="p-3">MC Name</th>
+                <th class="p-3">ทีมปฏิบัติงาน</th>
+                <th class="p-3">ประเภท</th>
+                <th class="p-3 text-right">ยอด Diamond ทีม</th>
+                <th class="p-3">Bonus Tier</th>
+                <th class="p-3 text-right">โบนัสที่ได้ (บาท)</th>
+                <th class="p-3 text-right">ขาดอีก (Diamond)</th>
+              </tr>
+            </thead>
+            <tbody id="bonus-table-body" class="divide-y divide-slate-800 text-slate-200">
+              <tr>
+                <td colspan="7" class="p-8 text-center text-slate-500 font-medium">กดปุ่มคำนวณโบนัสเพื่อแสดงข้อมูล...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+
+    </section>
+
+
+    <!-- SECTION 3: SIMULATOR / CALCULATOR TOOL -->
+    <section id="section-simulator" class="space-y-6 hidden">
+      <div class="glass-card p-6 rounded-2xl max-w-xl mx-auto space-y-5 border border-indigo-500/30">
+        <div class="flex items-center space-x-3 border-b border-slate-700 pb-3">
+          <div class="h-10 w-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl font-bold">
+            ⚡
+          </div>
+          <div>
+            <h3 class="text-sm font-extrabold text-white" id="sim-title">เครื่องมือคำนวณโบนัส MC (Simulate Bonus)</h3>
+            <p class="text-xs text-slate-400" id="sim-subtitle">ทดลองกรอกยอด Diamond เพื่อคำนวณโบนัสตามเกณฑ์</p>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-300 mb-1.5" id="sim-label-input">ระบุยอด Diamond/Sales ที่ทำได้:</label>
+            <input type="number" id="sim-input-score" placeholder="ตัวอย่าง: 185000" oninput="runBonusSimulator()" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-amber-300 font-black text-lg focus:outline-none focus:ring-2 focus:ring-amber-400">
+          </div>
+
+          <div class="p-4 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-400" id="sim-res-tier-label">ระดับ Tier ที่ได้:</span>
+              <span class="font-extrabold text-indigo-300" id="sim-res-tier">Tier 0</span>
+            </div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-400" id="sim-res-bonus-label">เงินโบนัสที่จะได้รับ:</span>
+              <span class="font-black text-xl text-emerald-400" id="sim-res-bonus">฿0 บาท</span>
+            </div>
+            <div class="flex justify-between items-center text-xs border-t border-slate-800 pt-2">
+              <span class="text-slate-400" id="sim-res-next-label">ขาดอีกเท่าไหร่จะขึ้น Tier ถัดไป:</span>
+              <span class="font-bold text-amber-400" id="sim-res-next">60,000 💎</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: ADD/EDIT MC SCHEDULE -->
+  <div id="modal-schedule" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-card rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl border border-slate-700">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+        <h3 class="text-sm font-extrabold text-white" id="modal-sch-title">เพิ่ม / แก้ไข ตารางงาน MC</h3>
+        <button onclick="closeScheduleModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">วันที่ปฏิบัติงาน</label>
+          <input type="date" id="modal-input-date" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">เลือก MC</label>
+          <input type="text" id="modal-input-mc" placeholder="ระบุชื่อ MC..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-300 mb-1">ห้อง/ทีม หลัก</label>
+          <input type="text" id="modal-input-default-team" placeholder="ระบุชื่อทีมหลัก..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="modal-check-cover" onchange="toggleCoverInput(this.checked)" class="rounded border-slate-700 text-amber-500 focus:ring-amber-400">
+          <label for="modal-check-cover" class="text-xs font-bold text-amber-400">เป็นการ "แทนห้อง" (Substitute MC)</label>
+        </div>
+
+        <div id="modal-cover-box" class="hidden">
+          <label class="block text-xs font-bold text-slate-300 mb-1">ระบุห้องที่ไปแทน</label>
+          <input type="text" id="modal-input-cover-team" placeholder="ระบุชื่อห้องที่ไปแทน..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+        </div>
+      </div>
+
+      <div class="flex justify-end space-x-2 pt-3 border-t border-slate-700">
+        <button onclick="closeScheduleModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:bg-slate-800" id="ui-modal-cancel">ยกเลิก</button>
+        <button onclick="submitScheduleForm()" class="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md" id="ui-modal-save">บันทึกข้อมูล</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- JAVASCRIPT LOGIC & DICTIONARY -->
+  <script>
+    let currentLang = 'th';
+    let topMCChartInstance = null;
+    let teamShareChartInstance = null;
+
+    const dictionary = {
+      th: {
+        title: "ACE Tracking — MC Schedule & Bonus Module",
+        subtitle: "ตารางงาน MC & ระบบคำนวณโบนัสประจำวัน",
+        tabSch: "🎙️ ตารางงาน MC",
+        tabBonus: "💰 คำนวณ Bonus MC",
+        tabSim: "⚡ เครื่องมือคำนวณเล่น (Simulator)",
+        btnRefresh: "รีเฟรชข้อมูล",
+        filterMC: "ค้นหาชื่อ MC",
+        filterTeam: "ค้นหาทีม",
+        btnAddSch: "เพิ่ม/แก้ไข ตารางงาน MC",
+        thDate: "วันที่",
+        thMC: "ชื่อ MC",
+        thTeam: "ห้อง/ทีม ปฏิบัติงาน",
+        thShift: "กะเวลา (Shift)",
+        thType: "สถานะการทำงาน",
+        thNotes: "หมายเหตุ",
+        subBadge: "แทนห้อง",
+        normalBadge: "ปกติ",
+        labelSelectDay: "เลือกวันที่คำนวณ:",
+        btnCalc: "คำนวณโบนัส",
+        cardDailyBonus: "โบนัส MC รวมประจำวัน",
+        cardDailyDiamonds: "ยอด Diamond รวมประจำวัน",
+        cardActiveMC: "MC ที่ปฏิบัติงานวันนี้",
+        cardMonthlyBonus: "ยอดโบนัสสะสมทั้งเดือน",
+        chartTopMC: "Top 5 MC Bonus Daily (อันดับโบนัสสูงสุดประจำวัน)",
+        chartTeamShare: "Team Diamond Share (สัดส่วนยอดทีม)",
+        tableTitleDaily: "ตารางรายละเอียดโบนัส MC ประจำวัน",
+        simTitle: "เครื่องมือคำนวณโบนัส MC (Simulate Bonus)",
+        simSubtitle: "ทดลองกรอกยอด Diamond เพื่อคำนวณโบนัสตามเกณฑ์",
+        simLabelInput: "ระบุยอด Diamond/Sales ที่ทำได้:",
+        simResTierLabel: "ระดับ Tier ที่ได้:",
+        simResBonusLabel: "เงินโบนัสที่จะได้รับ:",
+        simResNextLabel: "ขาดอีกเท่าไหร่จะขึ้น Tier ถัดไป:"
+      },
+      zh: {
+        title: "ACE Tracking — MC 排班与奖金模块",
+        subtitle: "MC 工作排班与每日奖金计算系统",
+        tabSch: "🎙️ MC 排班表",
+        tabBonus: "💰 计算 MC 奖金",
+        tabSim: "⚡ 模拟计算器 (Simulator)",
+        btnRefresh: "刷新数据",
+        filterMC: "搜索 MC 姓名",
+        filterTeam: "搜索团队",
+        btnAddSch: "添加/修改 MC 排班",
+        thDate: "日期",
+        thMC: "MC 姓名",
+        thTeam: "工作房间/团队",
+        thShift: "班次时间 (Shift)",
+        thType: "工作状态",
+        thNotes: "备注",
+        subBadge: "代班",
+        normalBadge: "正常",
+        labelSelectDay: "选择计算日期:",
+        btnCalc: "计算奖金",
+        cardDailyBonus: "当日 MC 奖金总额",
+        cardDailyDiamonds: "当日 Diamond 钻石总额",
+        cardActiveMC: "今日值班 MC 人数",
+        cardMonthlyBonus: "本月累计总奖金",
+        chartTopMC: "Top 5 MC 每日奖金排行榜",
+        chartTeamShare: "团队 Diamond 业绩占比",
+        tableTitleDaily: "每日 MC 奖金明细表",
+        simTitle: "MC 奖金模拟计算器 (Simulate Bonus)",
+        simSubtitle: "输入 Diamond 业绩试算对应奖金",
+        simLabelInput: "请输入 Diamond 钻石业绩:",
+        simResTierLabel: "获得 Tier 等级:",
+        simResBonusLabel: "可获得奖金:",
+        simResNextLabel: "距离下一等级还差:"
+      }
+    };
+
+    window.onload = function() {
+      requireACELoginOnStartup_(() => {
+        const today = new Date().getDate();
+        document.getElementById('bonus-select-day').value = today;
+        loadModuleData();
+      });
+    };
+
+    function switchLanguage(lang) {
+      currentLang = lang;
+      const dict = dictionary[lang];
+
+      document.getElementById('ui-title').innerText = dict.title;
+      document.getElementById('ui-subtitle').innerText = dict.subtitle;
+      document.getElementById('ui-tab-sch').innerText = dict.tabSch;
+      document.getElementById('ui-tab-bonus').innerText = dict.tabBonus;
+      document.getElementById('ui-tab-sim').innerText = dict.tabSim;
+      document.getElementById('ui-btn-refresh').innerText = dict.btnRefresh;
+      document.getElementById('ui-filter-mc').innerText = dict.filterMC;
+      document.getElementById('ui-filter-team').innerText = dict.filterTeam;
+      document.getElementById('ui-btn-add-sch').innerText = dict.btnAddSch;
+
+      document.getElementById('th-date').innerText = dict.thDate;
+      document.getElementById('th-mc').innerText = dict.thMC;
+      document.getElementById('th-team').innerText = dict.thTeam;
+      document.getElementById('th-shift').innerText = dict.thShift;
+      document.getElementById('th-type').innerText = dict.thType;
+      document.getElementById('th-notes').innerText = dict.thNotes;
+
+      document.getElementById('ui-label-select-day').innerText = dict.labelSelectDay;
+      document.getElementById('ui-btn-calc').innerText = dict.btnCalc;
+      document.getElementById('card-label-daily-bonus').innerText = dict.cardDailyBonus;
+      document.getElementById('card-label-daily-diamonds').innerText = dict.cardDailyDiamonds;
+      document.getElementById('card-label-active-mc').innerText = dict.cardActiveMC;
+      document.getElementById('card-label-monthly-bonus').innerText = dict.cardMonthlyBonus;
+      document.getElementById('chart-title-top-mc').innerText = dict.chartTopMC;
+      document.getElementById('chart-title-team-share').innerText = dict.chartTeamShare;
+      document.getElementById('table-title-daily').innerText = dict.tableTitleDaily;
+
+      document.getElementById('sim-title').innerText = dict.simTitle;
+      document.getElementById('sim-subtitle').innerText = dict.simSubtitle;
+      document.getElementById('sim-label-input').innerText = dict.simLabelInput;
+      document.getElementById('sim-res-tier-label').innerText = dict.simResTierLabel;
+      document.getElementById('sim-res-bonus-label').innerText = dict.simResBonusLabel;
+      document.getElementById('sim-res-next-label').innerText = dict.simResNextLabel;
+    };
+
+    function switchTab(tab) {
+      document.getElementById('section-schedule').classList.add('hidden');
+      document.getElementById('section-bonus').classList.add('hidden');
+      document.getElementById('section-simulator').classList.add('hidden');
+
+      document.getElementById('tab-btn-schedule').className = "px-4 py-2 rounded-xl text-xs font-extrabold transition bg-slate-800 text-slate-400 hover:bg-slate-700";
+      document.getElementById('tab-btn-bonus').className = "px-4 py-2 rounded-xl text-xs font-extrabold transition bg-slate-800 text-slate-400 hover:bg-slate-700";
+      document.getElementById('tab-btn-simulator').className = "px-4 py-2 rounded-xl text-xs font-extrabold transition bg-slate-800 text-slate-400 hover:bg-slate-700";
+
+      if (tab === 'schedule') {
+        document.getElementById('section-schedule').classList.remove('hidden');
+        document.getElementById('tab-btn-schedule').className = "px-4 py-2 rounded-xl text-xs font-extrabold transition bg-indigo-600 text-white shadow-md";
+      } else if (tab === 'bonus') {
+        document.getElementById('section-bonus').classList.remove('hidden');
+        document.getElementById('tab-btn-bonus').className = "px-4 py-2 rounded-xl text-xs font-extrabold transition bg-indigo-600 text-white shadow-md";
+        fetchBonusReport();
+      } else if (tab === 'simulator') {
+        document.getElementById('section-simulator').classList.remove('hidden');
+        document.getElementById('tab-btn-simulator').className = "px-4 py-2 rounded-xl text-xs font-extrabold transition bg-indigo-600 text-white shadow-md";
+      }
+    }
+
+    function loadModuleData() {
+      fetchSchedules();
+    }
+
+    function fetchSchedules() {
+      const mcFilter = document.getElementById('filter-mc-name').value;
+      const teamFilter = document.getElementById('filter-team-name').value;
+
+      google.script.run.withSuccessHandler(renderSchedules).getMCSchedules('', '', mcFilter, teamFilter, '');
+    }
+
+    function renderSchedules(res) {
+      const tbody = document.getElementById('schedule-table-body');
+      if (!res.success || !res.schedules || res.schedules.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-500">ไม่พบข้อมูลตารางงาน</td></tr>`;
+        return;
+      }
+
+      const dict = dictionary[currentLang];
+      let html = '';
+      res.schedules.forEach(item => {
+        const badge = item.isCover 
+          ? `<span class="badge-substitute px-2.5 py-1 rounded-full text-[10px] font-black">${dict.subBadge}</span>`
+          : `<span class="bg-slate-800 text-slate-300 border border-slate-700 px-2.5 py-1 rounded-full text-[10px] font-bold">${dict.normalBadge}</span>`;
+
+        html += `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="p-3.5 font-bold text-amber-300">${item.date}</td>
+            <td class="p-3.5 font-black text-white">${item.mcName}</td>
+            <td class="p-3.5 font-semibold text-indigo-300">${item.effectiveTeam}</td>
+            <td class="p-3.5 text-slate-400 font-medium">${item.shiftTime}</td>
+            <td class="p-3.5">${badge}</td>
+            <td class="p-3.5 text-slate-400 italic">${item.notes || '-'}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function fetchBonusReport() {
+      const selectedDay = document.getElementById('bonus-select-day').value;
+      google.script.run.withSuccessHandler(renderBonusReport).getMCBonusReport('', selectedDay);
+    }
+
+    function renderBonusReport(res) {
+      if (!res || !res.success) return;
+
+      document.getElementById('stat-daily-bonus').innerText = '฿' + res.summary.totalDailyBonus.toLocaleString();
+      document.getElementById('stat-daily-diamonds').innerText = res.summary.totalDailyDiamonds.toLocaleString() + ' 💎';
+      document.getElementById('stat-active-mc').innerText = res.summary.activeMCCount + ' คน';
+      document.getElementById('stat-monthly-bonus').innerText = '฿' + res.summary.totalMonthlyBonusAllMC.toLocaleString();
+
+      const tbody = document.getElementById('bonus-table-body');
+      const dict = dictionary[currentLang];
+      let html = '';
+
+      const topLabels = [];
+      const topData = [];
+      const teamShareMap = {};
+
+      res.dailyBreakdown.forEach(item => {
+        const badge = item.isCover 
+          ? `<span class="badge-substitute px-2 py-0.5 rounded-full text-[10px] font-extrabold">${dict.subBadge}</span>`
+          : `<span class="bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full text-[10px] font-bold">${dict.normalBadge}</span>`;
+
+        html += `
+          <tr class="hover:bg-slate-800/50 transition">
+            <td class="p-3 font-bold text-white">${item.mcName}</td>
+            <td class="p-3 font-semibold text-indigo-300">${item.effectiveTeam}</td>
+            <td class="p-3">${badge}</td>
+            <td class="p-3 text-right font-black text-amber-300">${item.teamScore.toLocaleString()} 💎</td>
+            <td class="p-3 font-bold text-slate-300">${item.bonusTier}</td>
+            <td class="p-3 text-right font-black text-emerald-400 text-sm">฿${item.bonusAmount.toLocaleString()}</td>
+            <td class="p-3 text-right text-slate-400">${item.nextTierDiff.toLocaleString()} 💎</td>
+          </tr>
+        `;
+
+        if (item.bonusAmount > 0) {
+          topLabels.push(item.mcName);
+          topData.push(item.bonusAmount);
+        }
+
+        teamShareMap[item.effectiveTeam] = (teamShareMap[item.effectiveTeam] || 0) + item.teamScore;
+      });
+
+      tbody.innerHTML = html || `<tr><td colspan="7" class="p-6 text-center text-slate-500">ไม่มีรายการโบนัสในวันที่เลือก</td></tr>`;
+
+      renderCharts(topLabels.slice(0, 5), topData.slice(0, 5), Object.keys(teamShareMap), Object.values(teamShareMap));
+    }
+
+    function renderCharts(topLabels, topData, teamLabels, teamData) {
+      if (topMCChartInstance) topMCChartInstance.destroy();
+      if (teamShareChartInstance) teamShareChartInstance.destroy();
+
+      const ctx1 = document.getElementById('chartTopMCBonus').getContext('2d');
+      topMCChartInstance = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: topLabels,
+          datasets: [{
+            label: 'Bonus (฿)',
+            data: topData,
+            backgroundColor: 'rgba(99, 102, 241, 0.8)',
+            borderRadius: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8' }, grid: { display: false } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+          }
+        }
+      });
+
+      const ctx2 = document.getElementById('chartTeamShare').getContext('2d');
+      teamShareChartInstance = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+          labels: teamLabels,
+          datasets: [{
+            data: teamData,
+            backgroundColor: ['#6366f1', '#a855f7', '#ec4899', '#f59e0b', '#10b981', '#3b82f6']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'right', labels: { color: '#94a3b8', font: { size: 10 } } } }
+        }
+      });
+    }
+
+    function runBonusSimulator() {
+      const score = parseFloat(document.getElementById('sim-input-score').value) || 0;
+      if (score < 60000) {
+        document.getElementById('sim-res-tier').innerText = 'Tier 0 (< 60,000 💎)';
+        document.getElementById('sim-res-bonus').innerText = '฿0 บาท';
+        document.getElementById('sim-res-next').innerText = (60000 - score).toLocaleString() + ' 💎';
+        return;
+      }
+
+      const tierStep = Math.floor(score / 60000);
+      const bonus = tierStep * 150;
+      const minB = tierStep * 60000;
+      const maxB = (tierStep + 1) * 60000 - 1;
+      const nextDiff = (tierStep + 1) * 60000 - score;
+
+      document.getElementById('sim-res-tier').innerText = `Tier ${tierStep} (${minB.toLocaleString()} - ${maxB.toLocaleString()} 💎)`;
+      document.getElementById('sim-res-bonus').innerText = `฿${bonus.toLocaleString()} บาท`;
+      document.getElementById('sim-res-next').innerText = `${nextDiff.toLocaleString()} 💎`;
+    }
+
+    function openScheduleModal() {
+      document.getElementById('modal-schedule').classList.remove('hidden');
+    }
+    function closeScheduleModal() {
+      document.getElementById('modal-schedule').classList.add('hidden');
+    }
+    function toggleCoverInput(checked) {
+      document.getElementById('modal-cover-box').classList.toggle('hidden', !checked);
+    }
+
+    function submitScheduleForm() {
+      const payload = {
+        dateStr: document.getElementById('modal-input-date').value,
+        mcName: document.getElementById('modal-input-mc').value,
+        defaultTeam: document.getElementById('modal-input-default-team').value,
+        isCover: document.getElementById('modal-check-cover').checked,
+        coverTeam: document.getElementById('modal-input-cover-team').value,
+        sheetName: ''
+      };
+
+      if (!payload.dateStr || !payload.mcName) {
+        alert('กรุณากรอกวันที่และชื่อ MC');
+        return;
+      }
+
+      withACEAdminSession_(function(token) {
+        google.script.run.withSuccessHandler(function(res) {
+          if (res.success) {
+            alert(res.message);
+            closeScheduleModal();
+            fetchSchedules();
+          } else {
+            alert('Error: ' + res.error);
+          }
+        }).withFailureHandler(function(err) {
+          alert('บันทึกไม่สำเร็จ: ' + (err && err.message || 'เกิดข้อผิดพลาด'));
+        }).saveMCSchedule(payload, 'Admin', token);
+      });
+    }
+
+    function exportToExcel() {
+      const table = document.getElementById('pdf-export-content');
+      const wb = XLSX.utils.table_to_book(table, { sheet: "MC_Bonus_Report" });
+      XLSX.writeFile(wb, `MC_Bonus_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    function exportToPDF() {
+      const element = document.getElementById('pdf-export-content');
+      const opt = {
+        margin:       0.3,
+        filename:     `MC_Bonus_Report_${new Date().toISOString().slice(0,10)}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+      };
+      html2pdf().set(opt).from(element).save();
+    }
+
+
+    // ฟังก์ชันคำนวณลำดับสัปดาห์จากวันที่ (1-31)
+function getWeekFromDay(dayNum) {
+  const day = parseInt(dayNum, 10);
+  if (day <= 7) return 1;
+  if (day <= 14) return 2;
+  if (day <= 21) return 3;
+  if (day <= 28) return 4;
+  return 5;
+}
+
+// ฟังก์ชันกรองและแยกหน้าข้อมูลตามสัปดาห์อัตโนมัติ
+function filterByWeek(selectedWeek) {
+  if (selectedWeek === 'all') {
+    fetchSchedules();
+    fetchBonusReport();
+    return;
+  }
+
+  const weekNum = parseInt(selectedWeek, 10);
+  
+  // กรองข้อมูลตารางงาน MC ให้แสดงเฉพาะสัปดาห์ที่เลือก
+  const mcRows = document.querySelectorAll('#schedule-table-body tr');
+  mcRows.forEach(row => {
+    const dateCell = row.cells[0]?.innerText; // สมมติ คอลัมน์ที่ 1 คือวันที่ (YYYY-MM-DD)
+    if (dateCell && dateCell.includes('-')) {
+      const day = parseInt(dateCell.split('-')[2], 10);
+      const rowWeek = getWeekFromDay(day);
+      row.style.display = (rowWeek === weekNum) ? '' : 'none';
+    }
+  });
+
+  // กรองตารางรายงานโบนัสประจำวัน
+  const bonusRows = document.querySelectorAll('#bonus-table-body tr');
+  bonusRows.forEach(row => {
+    const dayCell = row.dataset.dayNum; // อ่านค่าวันที่ที่แนบไว้ใน data attribute
+    if (dayCell) {
+      const rowWeek = getWeekFromDay(dayCell);
+      row.style.display = (rowWeek === weekNum) ? '' : 'none';
+    }
+  });
+}
+
+
+function loadMonthlySummary(selectedMonth) {
+  google.script.run.withSuccessHandler(response => {
+    if (!response.success) return;
+
+    const summaryData = response.data;
+    let totalMonthBonus = 0;
+    let totalMonthDiamonds = 0;
+    let activeMcCount = summaryData.length;
+
+    let tableHtml = '';
+
+    summaryData.forEach(item => {
+      totalMonthBonus += item.totalBonus;
+      totalMonthDiamonds += item.totalDiamond;
+
+      // กำหนด Tier ตามยอด Diamond สะสมทั้งเดือน
+      let tierText = 'Tier 0 (< 60,000 💎)';
+      if (item.totalDiamond >= 120000) tierText = 'Tier 2 (120,000 - 179,999 💎)';
+      else if (item.totalDiamond >= 60000) tierText = 'Tier 1 (60,000 - 119,999 💎)';
+
+      tableHtml += `
+        <tr class="border-b border-slate-800 text-xs">
+          <td class="py-3 px-4 font-bold text-white">${item.mcName}</td>
+          <td class="py-3 px-4 text-indigo-400 font-semibold">${item.team}</td>
+          <td class="py-3 px-4 text-slate-400">${item.type} (${item.workDays} วัน)</td>
+          <td class="py-3 px-4 text-amber-400 font-bold">${item.totalDiamond.toLocaleString()} 💎</td>
+          <td class="py-3 px-4 text-slate-300">${tierText}</td>
+          <td class="py-3 px-4 text-emerald-400 font-bold">฿${item.totalBonus.toLocaleString()}</td>
+        </tr>
+      `;
+    });
+
+    // อัปเดต Card สรุปยอดรวมด้านบน
+    document.getElementById('card-total-bonus').innerText = `฿${totalMonthBonus.toLocaleString()}`;
+    document.getElementById('card-total-diamonds').innerText = `${totalMonthDiamonds.toLocaleString()} 💎`;
+    document.getElementById('card-mc-count').innerText = `${activeMcCount} คน`;
+
+    // อัปเดต ตารางรายละเอียดรายเดือน
+    document.getElementById('bonus-table-body').innerHTML = tableHtml;
+
+  }).getMonthlyMCBonusSummary(selectedMonth);
+}
+// รูปแบบข้อมูลที่ส่งเข้าฟังก์ชัน renderMonthlyTotalCard
+const exampleData = [
+  { mcName: "PORCH", team: "A - ACE", workDays: 29, totalBonus: 600 },
+  { mcName: "JR", team: "103 - ACE", workDays: 30, totalBonus: 450 },
+  { mcName: "Yo", team: "B - ACE", workDays: 7, totalBonus: 150 },
+  { mcName: "Naphat", team: "X - ACE", workDays: 39, totalBonus: 0 }
+];
+
+// เรียกใช้งาน
+renderMonthlyTotalCard(exampleData);
+// ฟังก์ชันเรนเดอร์ตารางสรุปสะสมรายเดือน
+function renderMonthlyTotalCard(mcMonthlyData) {
+  const tbody = document.getElementById('monthly-summary-body');
+  
+  if (!mcMonthlyData || mcMonthlyData.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูลสะสมในเดือนนี้</td>
+      </tr>`;
+    return;
+  }
+
+  // สร้างแถวข้อมูลตามรายชื่อ MC
+  const rows = mcMonthlyData.map(item => `
+    <tr class="hover:bg-slate-200/80 transition-colors">
+      <td class="py-3 px-4">
+        <div class="font-black text-slate-900 text-sm leading-tight">${item.mcName}</div>
+        <div class="text-[10px] text-slate-500 font-medium mt-0.5">ประจำ: ${item.team}</div>
+      </td>
+      <td class="py-3 px-4 text-center font-bold text-slate-400 text-xs">
+        ${item.workDays} วัน
+      </td>
+      <td class="py-3 px-4 text-right font-black text-amber-500 text-sm">
+        ฿${Number(item.totalBonus).toLocaleString()}
+      </td>
+    </tr>
+  `).join('');
+
+  tbody.innerHTML = rows;
+}
+
+
+// ข้อมูล MC ทั้งหมดประจำเดือน
+const allMCData = [
+  { mcName: "PORCH", team: "A - ACE", workDays: 29, totalBonus: 600 },
+  { mcName: "JR", team: "103 - ACE", workDays: 30, totalBonus: 450 },
+  { mcName: "Yo", team: "B - ACE", workDays: 7, totalBonus: 150 },
+  { mcName: "Naphat", team: "X - ACE", workDays: 39, totalBonus: 0 },
+  { mcName: "Meen", team: "X - ACE", workDays: 38, totalBonus: 0 },
+  { mcName: "YO", team: "105 - ACE", workDays: 24, totalBonus: 0 },
+  { mcName: "Melya", team: "105 - ACE", workDays: 26, totalBonus: 0 }
+];
+
+function renderAllMCTotalCard(dataList) {
+  const tbody = document.getElementById('monthly-summary-body');
+  const countBadge = document.getElementById('mc-total-count');
+
+  if (countBadge) countBadge.innerText = `${dataList.length} คน`;
+
+  if (!dataList || dataList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล MC</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = dataList.map(item => `
+    <tr class="hover:bg-slate-200 transition-colors">
+      <td class="py-3 px-4">
+        <div class="font-black text-slate-900 text-sm leading-tight">${item.mcName}</div>
+        <div class="text-[10px] text-slate-500 font-medium mt-0.5">ประจำ: ${item.team}</div>
+      </td>
+      <td class="py-3 px-4 text-center font-bold text-slate-400 text-xs">
+        ${item.workDays} วัน
+      </td>
+      <td class="py-3 px-4 text-right font-black text-amber-500 text-sm">
+        ฿${Number(item.totalBonus).toLocaleString()}
+      </td>
+    </tr>
+  `).join('');
+}
+
+// สั่งเรนเดอร์ข้อมูลทุกคนทันที
+renderAllMCTotalCard(allMCData);
+
+// ฟังก์ชันโหลดข้อมูลรายเดือนตามชีต Team Data
+function loadMonthlySummaryFromTeamData(selectedMonth) {
+  google.script.run
+    .withSuccessHandler(response => {
+      if (!response.success) {
+        console.error("Error loading data:", response.error);
+        return;
+      }
+      
+      // ส่งข้อมูลรายชื่อทั้งหมดที่ได้ไปเรนเดอร์ลงตาราง
+      renderAllMCTotalCard(response.data);
+    })
+    .getMonthlyMCBonusFromTeamData(selectedMonth);
+}
+
+function removeDuplicateMCs(dataList) {
+  const uniqueMap = new Map();
+
+  dataList.forEach(item => {
+    const key = item.mcName.trim().toUpperCase();
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, item);
+    } else {
+      // กรณีมีชื่อซ้ำ ให้นำจำนวนวันจัดงานและโบนัสมารวมกัน
+      const existing = uniqueMap.get(key);
+      existing.workDays += item.workDays;
+      existing.totalBonus += item.totalBonus;
+    }
+  });
+
+  return Array.from(uniqueMap.values());
+}
+
+
+
+
+
+  </script>
+<script>
+function withACEAdminSession_(onReady, onError) {
+  const fail = onError || function(message) { alert(message); };
+  if (!(typeof google !== 'undefined' && google.script && google.script.run)) {
+    fail('ต้องเปิดหน้านี้จาก Apps Script Web App');
+    return;
+  }
+  let stored = '';
+  try { stored = localStorage.getItem('ACE_ADMIN_SESSION_TOKEN') || ''; } catch (error) {}
+  const promptForLogin = function() {
+    const username = window.prompt('ชื่อผู้ใช้ Admin');
+    if (username === null) return fail('ยกเลิกการเข้าสู่ระบบ');
+    const passcode = window.prompt('รหัสผ่าน Admin');
+    if (passcode === null) return fail('ยกเลิกการเข้าสู่ระบบ');
+    google.script.run.withSuccessHandler(function(result) {
+      if (!result || !result.success || !result.token) return fail((result && result.error) || 'เข้าสู่ระบบไม่สำเร็จ');
+      try { localStorage.setItem('ACE_ADMIN_SESSION_TOKEN', result.token); } catch (error) {}
+      onReady(result.token);
+    }).withFailureHandler(function() { fail('ไม่สามารถตรวจสอบบัญชีได้'); }).verifyAdminAccess(passcode, username);
+  };
+  if (!stored) return promptForLogin();
+  google.script.run.withSuccessHandler(function(result) {
+    if (result && result.success) onReady(stored);
+    else {
+      try { localStorage.removeItem('ACE_ADMIN_SESSION_TOKEN'); } catch (error) {}
+      promptForLogin();
+    }
+  }).withFailureHandler(function() { promptForLogin(); }).validateAdminSession(stored);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACE Tracking - Weekly Summary Dashboard</title>
+
+  <!-- Tailwind CSS & Fonts & Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Chart.js CDN for Visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+      background: #0f172a;
+      background-image: radial-gradient(at 50% 0%, #1e1b4b 0px, transparent 75%), radial-gradient(at 0% 100%, #0f172a 0px, transparent 50%);
+      background-attachment: fixed;
+      min-height: 100vh;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+    }
+
+    .glass-dark {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+<?!= include('auth_gate'); ?>
+</head>
+
+<body class="text-slate-800 antialiased p-4 sm:p-6 lg:p-8 selection:bg-indigo-500 selection:text-white">
+
+  <div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- 1. HEADER & CONTROLS SECTION -->
+    <div class="glass-card p-5 sm:p-6 rounded-3xl shadow-2xl border border-slate-200/80 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+      <div>
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white text-lg shadow-lg shadow-indigo-500/30">
+            <i class="fa-solid fa-calendar-week"></i>
+          </div>
+          <h1 id="ui-weekly-title" class="text-xl sm:text-2xl font-black text-slate-900 tracking-wide">
+            ระบบสรุปข้อมูลรายสัปดาห์ (Weekly Summary Dashboard)
+          </h1>
+        </div>
+        <p id="ui-weekly-subtitle" class="text-xs sm:text-sm text-slate-500 font-medium mt-1 pl-13">
+          รายงานผลการดำเนินงาน ยอด Diamond และอันดับรายสัปดาห์ระบบ ACE Tracking
+        </p>
+      </div>
+
+      <!-- Controls & Filters -->
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Month Sheet Select -->
+        <div class="flex flex-col">
+          <label id="ui-label-sheet" class="text-[11px] font-bold text-slate-600 mb-1">
+            <i class="fa-solid fa-file-excel text-emerald-600 mr-1"></i>เลือกชีตเดือน:
+          </label>
+          <select id="weekly-sheet-select" onchange="fetchWeeklyDashboardData()"
+            class="bg-slate-100 border border-slate-300 font-bold text-xs px-3.5 py-2 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm min-w-[160px]">
+            <option value="">กำลังโหลดชีต...</option>
+          </select>
+        </div>
+
+        <!-- Week Select -->
+        <div class="flex flex-col">
+          <label id="ui-label-week" class="text-[11px] font-bold text-slate-600 mb-1">
+            <i class="fa-solid fa-clock text-indigo-600 mr-1"></i>เลือกสัปดาห์:
+          </label>
+          <select id="weekly-week-select" onchange="fetchWeeklyDashboardData()"
+            class="bg-slate-100 border border-slate-300 font-bold text-xs px-3.5 py-2 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm">
+            <option value="1">สัปดาห์ที่ 1 (วันที่ 1 - 7)</option>
+            <option value="2">สัปดาห์ที่ 2 (วันที่ 8 - 14)</option>
+            <option value="3">สัปดาห์ที่ 3 (วันที่ 15 - 21)</option>
+            <option value="4">สัปดาห์ที่ 4 (วันที่ 22 - 28)</option>
+            <option value="5">สัปดาห์ที่ 5 (วันที่ 29 - สิ้นเดือน)</option>
+          </select>
+        </div>
+
+        <!-- Refresh Button -->
+        <div class="flex flex-col justify-end">
+          <button onclick="fetchWeeklyDashboardData()"
+            class="mt-5 sm:mt-0 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-md shadow-indigo-600/30 flex items-center space-x-1.5 active:scale-95">
+            <i id="refresh-icon" class="fa-solid fa-arrows-rotate"></i>
+            <span id="ui-btn-refresh">อัปเดตข้อมูล</span>
+          </button>
+        </div>
+
+        <!-- Language Switcher Button -->
+        <div class="flex flex-col justify-end">
+          <button id="btn-lang-toggle" onclick="toggleLanguage()"
+            class="mt-5 sm:mt-0 bg-slate-900 hover:bg-slate-800 text-amber-300 font-extrabold text-xs px-4 py-2.5 rounded-xl border border-amber-400/30 transition shadow-md flex items-center space-x-1.5 active:scale-95">
+            <i class="fa-solid fa-language text-base"></i>
+            <span id="ui-lang-text">🇨🇳 中文</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOADING STATE INDICATOR -->
+    <div id="weekly-loading-state" class="py-16 text-center">
+      <div class="relative inline-flex items-center justify-center">
+        <div class="w-14 h-14 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+        <i class="fa-solid fa-gem absolute text-indigo-400 text-sm animate-pulse"></i>
+      </div>
+      <p id="ui-loading-text" class="text-slate-300 font-medium text-xs mt-3 tracking-wide">กำลังโหลดข้อมูลสัปดาห์...</p>
+    </div>
+
+    <!-- MAIN DASHBOARD CONTENT AREA -->
+    <div id="weekly-dashboard-content" class="hidden space-y-6">
+
+      <!-- 2. KPI EXECUTIVE SUMMARY CARDS (4 CARDS) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Total Diamonds -->
+        <div class="glass-card p-5 rounded-2xl shadow-xl border-l-4 border-l-rose-500 relative overflow-hidden group hover:border-rose-300 transition">
+          <div class="flex items-center justify-between">
+            <div>
+              <p id="ui-kpi-total-diamonds" class="text-[11px] font-bold text-rose-600 uppercase tracking-wider">ยอดรวม Diamond ประจำสัปดาห์</p>
+              <h3 id="kpi-total-diamonds-val" class="text-3xl font-black text-slate-900 mt-1">0</h3>
+            </div>
+            <div class="w-12 h-12 bg-gradient-to-tr from-rose-600 to-pink-500 text-white rounded-2xl flex items-center justify-center text-xl shadow-lg shadow-rose-500/30 group-hover:scale-110 transition">
+              <i class="fa-solid fa-gem"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Daily Average -->
+        <div class="glass-card p-5 rounded-2xl shadow-xl border-l-4 border-l-indigo-500 relative overflow-hidden group hover:border-indigo-300 transition">
+          <div class="flex items-center justify-between">
+            <div>
+              <p id="ui-kpi-daily-avg" class="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">ค่าเฉลี่ย Diamond ต่อวัน</p>
+              <h3 id="kpi-daily-avg-val" class="text-3xl font-black text-slate-900 mt-1">0</h3>
+            </div>
+            <div class="w-12 h-12 bg-gradient-to-tr from-indigo-600 to-blue-500 text-white rounded-2xl flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30 group-hover:scale-110 transition">
+              <i class="fa-solid fa-chart-line"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Top Team -->
+        <div class="glass-card p-5 rounded-2xl shadow-xl border-l-4 border-l-amber-500 relative overflow-hidden group hover:border-amber-300 transition">
+          <div class="flex items-center justify-between">
+            <div>
+              <p id="ui-kpi-top-team" class="text-[11px] font-bold text-amber-600 uppercase tracking-wider">ทีมอันดับ 1 ประจำสัปดาห์</p>
+              <h3 id="kpi-top-team-val" class="text-xl font-black text-amber-600 mt-1 truncate max-w-[150px]">-</h3>
+              <p id="kpi-top-team-sub" class="text-[10px] text-slate-500 font-semibold mt-0.5">0 Diamond</p>
+            </div>
+            <div class="w-12 h-12 bg-gradient-to-tr from-amber-500 to-orange-400 text-slate-950 rounded-2xl flex items-center justify-center text-xl shadow-lg shadow-amber-500/30 group-hover:scale-110 transition">
+              <i class="fa-solid fa-trophy"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: Top Individual VJ -->
+        <div class="glass-card p-5 rounded-2xl shadow-xl border-l-4 border-l-emerald-500 relative overflow-hidden group hover:border-emerald-300 transition">
+          <div class="flex items-center justify-between">
+            <div>
+              <p id="ui-kpi-top-vj" class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">VJ อันดับ 1 ประจำสัปดาห์</p>
+              <h3 id="kpi-top-vj-val" class="text-xl font-black text-emerald-600 mt-1 truncate max-w-[150px]">-</h3>
+              <p id="kpi-top-vj-sub" class="text-[10px] text-slate-500 font-semibold mt-0.5">0 Diamond</p>
+            </div>
+            <div class="w-12 h-12 bg-gradient-to-tr from-emerald-500 to-teal-400 text-white rounded-2xl flex items-center justify-center text-xl shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition">
+              <i class="fa-solid fa-crown"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. CHARTS & VISUALIZATIONS SECTION -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Line Chart: Daily Diamond Trend (2 cols) -->
+        <div class="lg:col-span-2 glass-dark p-5 sm:p-6 rounded-3xl shadow-xl border border-slate-800 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-4">
+            <h3 id="ui-chart-trend-title" class="font-extrabold text-white text-sm flex items-center">
+              <i class="fa-solid fa-chart-line text-rose-400 mr-2"></i> แนวโน้มยอด Diamond รายวัน (Daily Diamond Trend)
+            </h3>
+            <span id="ui-chart-trend-sub" class="text-[11px] text-slate-400 font-medium">แยกรายวันในสัปดาห์</span>
+          </div>
+          <div class="relative h-64 sm:h-72 w-full">
+            <canvas id="weeklyDailyTrendChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Doughnut Chart: Team Share Distribution (1 col) -->
+        <div class="glass-dark p-5 sm:p-6 rounded-3xl shadow-xl border border-slate-800 flex flex-col justify-between">
+          <div class="flex items-center justify-between mb-4">
+            <h3 id="ui-chart-share-title" class="font-extrabold text-white text-sm flex items-center">
+              <i class="fa-solid fa-chart-pie text-indigo-400 mr-2"></i> สัดส่วนยอด Diamond รวมแยกตามทีม
+            </h3>
+          </div>
+          <div class="relative h-64 sm:h-72 w-full flex items-center justify-center">
+            <canvas id="weeklyTeamShareChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. RANKINGS & LEADERBOARDS SECTION -->
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+        <!-- Team Rankings Table (2 Cols) -->
+        <div class="lg:col-span-2 glass-card rounded-2xl shadow-xl overflow-hidden border border-slate-200/80 flex flex-col">
+          <div class="p-4 border-b border-slate-200/80 bg-slate-50/80 flex justify-between items-center">
+            <h3 id="ui-title-team-rank" class="font-black text-slate-800 text-sm flex items-center">
+              <i class="fa-solid fa-trophy text-amber-500 mr-2"></i> ตารางจัดอันดับทีม (Team Rankings)
+            </h3>
+            <span id="team-count-badge" class="text-xs bg-amber-100 text-amber-800 font-extrabold px-2.5 py-0.5 rounded-full">0 ทีม</span>
+          </div>
+          <div class="overflow-x-auto custom-scrollbar flex-grow max-h-[500px]">
+            <table class="w-full text-xs text-left border-collapse">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+                <tr>
+                  <th id="th-team-rank" class="p-3 text-center w-14">อันดับ</th>
+                  <th id="th-team-name" class="p-3">ชื่อทีม</th>
+                  <th id="th-team-vjcount" class="p-3 text-center">จำนวน VJ</th>
+                  <th id="th-team-total" class="p-3 text-right">ยอด Diamond รวม</th>
+                </tr>
+              </thead>
+              <tbody id="weekly-team-tbody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                <!-- JS Inject -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- VJ Leaderboard Table with Live Search Filter (3 Cols) -->
+        <div class="lg:col-span-3 glass-card rounded-2xl shadow-xl overflow-hidden border border-slate-200/80 flex flex-col">
+          <div class="p-4 border-b border-slate-200/80 bg-slate-50/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h3 id="ui-title-vj-rank" class="font-black text-slate-800 text-sm flex items-center">
+              <i class="fa-solid fa-ranking-star text-indigo-600 mr-2"></i> ตารางจัดอันดับ VJ รายบุคคล (VJ Leaderboard)
+            </h3>
+            
+            <!-- Live Search Filter -->
+            <div class="relative w-full sm:w-56">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+              <input type="text" id="vj-search-input" onkeyup="filterVJTable()" placeholder="🔍 ค้นหาชื่อ VJ..."
+                class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-inner text-slate-800">
+            </div>
+          </div>
+
+          <div class="overflow-x-auto custom-scrollbar flex-grow max-h-[500px]">
+            <table class="w-full text-xs text-left border-collapse" id="weekly-vj-table">
+              <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+                <tr>
+                  <th id="th-vj-rank" class="p-3 text-center w-14">อันดับ</th>
+                  <th id="th-vj-name" class="p-3">ชื่อ VJ</th>
+                  <th id="th-vj-team" class="p-3">สังกัดทีม</th>
+                  <th id="th-vj-diamond" class="p-3 text-right text-rose-600 font-black">ยอด Diamond สัปดาห์นี้</th>
+                </tr>
+              </thead>
+              <tbody id="weekly-vj-tbody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                <!-- JS Inject -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    // State Variables
+    let currentLang = 'th'; // 'th' or 'zh'
+    let rawWeeklyData = null;
+    let trendChartInstance = null;
+    let shareChartInstance = null;
+
+    // Translation Dictionary (i18n)
+    const translations = {
+      th: {
+        weeklyTitle: "ระบบสรุปข้อมูลรายสัปดาห์ (Weekly Summary Dashboard)",
+        weeklySubtitle: "รายงานผลการดำเนินงาน ยอด Diamond และอันดับรายสัปดาห์ระบบ ACE Tracking",
+        labelSheet: "เลือกชีตเดือน:",
+        labelWeek: "เลือกสัปดาห์:",
+        btnRefresh: "อัปเดตข้อมูล",
+        langText: "🇨🇳 中文",
+        loadingText: "กำลังดึงข้อมูลสัปดาห์จาก Apps Script...",
+        
+        kpiTotalDiamonds: "ยอดรวม Diamond ประจำสัปดาห์",
+        kpiDailyAvg: "ค่าเฉลี่ย Diamond ต่อวัน",
+        kpiTopTeam: "ทีมอันดับ 1 ประจำสัปดาห์",
+        kpiTopVJ: "VJ อันดับ 1 ประจำสัปดาห์",
+
+        chartTrendTitle: "แนวโน้มยอด Diamond รายวัน (Daily Diamond Trend)",
+        chartTrendSub: "แยกรายวันในสัปดาห์",
+        chartShareTitle: "สัดส่วนยอด Diamond รวมแยกตามทีม",
+        chartTrendLabel: "ยอด Diamond รายวัน",
+
+        titleTeamRank: "ตารางจัดอันดับทีม (Team Rankings)",
+        thTeamRank: "อันดับ",
+        thTeamName: "ชื่อทีม",
+        thTeamVJCount: "จำนวน VJ ในทีม",
+        thTeamTotal: "ยอดรวม Diamond",
+
+        titleVJRank: "ตารางจัดอันดับ VJ รายบุคคล (VJ Leaderboard)",
+        searchPlaceholder: "🔍 ค้นหาชื่อ VJ...",
+        thVJRank: "อันดับ",
+        thVJName: "ชื่อ VJ",
+        thVJTeam: "สังกัดทีม",
+        thVJDiamond: "ยอด Diamond สัปดาห์นี้",
+
+        weekOptions: [
+          "สัปดาห์ที่ 1 (วันที่ 1 - 7)",
+          "สัปดาห์ที่ 2 (วันที่ 8 - 14)",
+          "สัปดาห์ที่ 3 (วันที่ 15 - 21)",
+          "สัปดาห์ที่ 4 (วันที่ 22 - 28)",
+          "สัปดาห์ที่ 5 (วันที่ 29 - สิ้นเดือน)"
+        ],
+        noData: "ไม่พบข้อมูลในสัปดาห์นี้"
+      },
+      zh: {
+        weeklyTitle: "周数据汇总仪表板 (Weekly Summary Dashboard)",
+        weeklySubtitle: "ACE Tracking 系统每周绩效、Diamond 总额与排名汇总报告",
+        labelSheet: "选择月份工作表:",
+        labelWeek: "选择周次:",
+        btnRefresh: "更新数据",
+        langText: "🇹🇭 TH",
+        loadingText: "正在从 Apps Script 获取周数据...",
+
+        kpiTotalDiamonds: "本周 Diamond 总额",
+        kpiDailyAvg: "日均 Diamond 额",
+        kpiTopTeam: "本周冠军团队",
+        kpiTopVJ: "本周冠军 VJ",
+
+        chartTrendTitle: "每日 Diamond 趋势 (Daily Diamond Trend)",
+        chartTrendSub: "按本周每日分布",
+        chartShareTitle: "各团队 Diamond 占比分布",
+        chartTrendLabel: "每日 Diamond 数",
+
+        titleTeamRank: "团队排行榜 (Team Rankings)",
+        thTeamRank: "排名",
+        thTeamName: "团队名称",
+        thTeamVJCount: "团队 VJ 人数",
+        thTeamTotal: "Diamond 总额",
+
+        titleVJRank: "个人 VJ 积分榜 (VJ Leaderboard)",
+        searchPlaceholder: "🔍 搜索 VJ 姓名...",
+        thVJRank: "排名",
+        thVJName: "VJ 姓名",
+        thVJTeam: "所属团队",
+        thVJDiamond: "本周 Diamond 额",
+
+        weekOptions: [
+          "第 1 周 (1日 - 7日)",
+          "第 2 周 (8日 - 14日)",
+          "第 3 周 (15日 - 21日)",
+          "第 4 周 (22日 - 28日)",
+          "第 5 周 (29日 - 月末)"
+        ],
+        noData: "本周暂无数据"
+      }
+    };
+
+    // Initialize Dashboard on DOM Content Loaded
+    document.addEventListener("DOMContentLoaded", function () {
+      initDashboard();
+    });
+
+    function initDashboard() {
+      updateLanguageUI();
+      requireACELoginOnStartup_(() => fetchSheetList());
+    }
+
+    // 1. Fetch Sheet List from Google Apps Script Backend (getSheetList)
+    function fetchSheetList() {
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(populateSheetSelect)
+          .withFailureHandler(handleBackendError)
+          .getSheetList();
+      } else {
+        // Fallback Mocking for Standalone Testing
+        console.warn("Google Apps Script environment not detected. Loading Mock Sheets.");
+        populateSheetSelect(["AUGUST 2026", "JULY 2026", "JUNE 2026"]);
+      }
+    }
+
+    function populateSheetSelect(sheetList) {
+      const select = document.getElementById("weekly-sheet-select");
+      select.innerHTML = "";
+      if (!sheetList || sheetList.length === 0) {
+        select.innerHTML = `<option value="">ไม่พบข้อมูลชีต</option>`;
+        return;
+      }
+
+      sheetList.forEach(sheetName => {
+        const opt = document.createElement("option");
+        opt.value = sheetName;
+        opt.textContent = sheetName;
+        select.appendChild(opt);
+      });
+
+      // Automatically fetch data for the first sheet
+      fetchWeeklyDashboardData();
+    }
+
+    // 2. Fetch Weekly Stats Summary from Apps Script Backend (getWeeklyStatsSummary)
+    function fetchWeeklyDashboardData() {
+      const sheetName = document.getElementById("weekly-sheet-select").value;
+      const weekNumber = parseInt(document.getElementById("weekly-week-select").value, 10);
+
+      if (!sheetName) return;
+
+      // Show Loading State
+      document.getElementById("weekly-loading-state").classList.remove("hidden");
+      document.getElementById("weekly-dashboard-content").classList.add("hidden");
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(onWeeklyDataReceived)
+          .withFailureHandler(handleBackendError)
+          .getWeeklyStatsSummary(sheetName, weekNumber);
+      } else {
+        // Fallback Mock Data Simulation
+        setTimeout(() => {
+          const mockRes = getMockWeeklyData(weekNumber);
+          onWeeklyDataReceived(mockRes);
+        }, 600);
+      }
+    }
+
+    // 3. Receive & Process Backend Data
+    function onWeeklyDataReceived(data) {
+      rawWeeklyData = data || {};
+
+      // Hide Loading State & Show Content
+      document.getElementById("weekly-loading-state").classList.add("hidden");
+      document.getElementById("weekly-dashboard-content").classList.remove("hidden");
+
+      renderKPIs();
+      renderCharts();
+      renderTeamRankings();
+      renderVJLeaderboard();
+    }
+
+    function handleBackendError(err) {
+      console.error("Backend Error:", err);
+      document.getElementById("weekly-loading-state").classList.add("hidden");
+      alert("เกิดข้อผิดพลาดในการโหลดข้อมูล: " + (err.message || err));
+    }
+
+    // 4. Render KPI Cards
+    function renderKPIs() {
+      if (!rawWeeklyData) return;
+
+      const teamStats = rawWeeklyData.teamStats || [];
+      const vjStatsList = rawWeeklyData.vjStatsList || [];
+      const dailyTotalsMap = rawWeeklyData.dailyTotalsMap || {};
+
+      // Calculate Total Diamonds
+      let totalDiamonds = 0;
+      if (vjStatsList.length > 0) {
+        totalDiamonds = vjStatsList.reduce((sum, item) => sum + (Number(item.diamond) || 0), 0);
+      } else if (teamStats.length > 0) {
+        totalDiamonds = teamStats.reduce((sum, item) => sum + (Number(item.totalDiamond) || 0), 0);
+      }
+
+      // Calculate Days Count & Daily Average
+      const dayKeys = Object.keys(dailyTotalsMap);
+      const daysCount = dayKeys.length > 0 ? dayKeys.length : 7;
+      const dailyAvg = totalDiamonds > 0 ? Math.round(totalDiamonds / daysCount) : 0;
+
+      // Top Team
+      let topTeamName = "-";
+      let topTeamDiamond = 0;
+      if (rawWeeklyData.topTeam) {
+        if (typeof rawWeeklyData.topTeam === 'object') {
+          topTeamName = rawWeeklyData.topTeam.team || rawWeeklyData.topTeam.name || "-";
+          topTeamDiamond = rawWeeklyData.topTeam.totalDiamond || 0;
+        } else {
+          topTeamName = rawWeeklyData.topTeam;
+        }
+      } else if (teamStats.length > 0) {
+        const sortedTeams = [...teamStats].sort((a, b) => (b.totalDiamond || 0) - (a.totalDiamond || 0));
+        topTeamName = sortedTeams[0].team || "-";
+        topTeamDiamond = sortedTeams[0].totalDiamond || 0;
+      }
+
+      // Top VJ
+      let topVJName = "-";
+      let topVJDiamond = 0;
+      if (rawWeeklyData.topVJ) {
+        if (typeof rawWeeklyData.topVJ === 'object') {
+          topVJName = rawWeeklyData.topVJ.vjName || rawWeeklyData.topVJ.name || "-";
+          topVJDiamond = rawWeeklyData.topVJ.diamond || 0;
+        } else {
+          topVJName = rawWeeklyData.topVJ;
+        }
+      } else if (vjStatsList.length > 0) {
+        const sortedVJs = [...vjStatsList].sort((a, b) => (b.diamond || 0) - (a.diamond || 0));
+        topVJName = sortedVJs[0].vjName || "-";
+        topVJDiamond = sortedVJs[0].diamond || 0;
+      }
+
+      // Populate UI
+      document.getElementById("kpi-total-diamonds-val").textContent = totalDiamonds.toLocaleString();
+      document.getElementById("kpi-daily-avg-val").textContent = dailyAvg.toLocaleString();
+      document.getElementById("kpi-top-team-val").textContent = topTeamName;
+      document.getElementById("kpi-top-team-sub").textContent = topTeamDiamond.toLocaleString() + " Diamond";
+      document.getElementById("kpi-top-vj-val").textContent = topVJName;
+      document.getElementById("kpi-top-vj-sub").textContent = topVJDiamond.toLocaleString() + " Diamond";
+    }
+
+    // 5. Render Chart.js Visualizations
+    function renderCharts() {
+      if (!rawWeeklyData) return;
+
+      const t = translations[currentLang];
+      const dailyTotalsMap = rawWeeklyData.dailyTotalsMap || {};
+      const teamStats = rawWeeklyData.teamStats || [];
+
+      // --- Chart 1: Daily Diamond Line Chart ---
+      const trendCtx = document.getElementById("weeklyDailyTrendChart").getContext("2d");
+      
+      // Sort day keys (e.g. Day 1..7 or 15..21)
+      const dayKeys = Object.keys(dailyTotalsMap).sort((a, b) => Number(a) - Number(b));
+      const trendLabels = dayKeys.map(d => `${currentLang === 'th' ? 'วันที่' : 'Day'} ${d}`);
+      const trendData = dayKeys.map(d => dailyTotalsMap[d] || 0);
+
+      if (trendChartInstance) trendChartInstance.destroy();
+
+      trendChartInstance = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: trendLabels.length > 0 ? trendLabels : ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Day 7'],
+          datasets: [{
+            label: t.chartTrendLabel,
+            data: trendData.length > 0 ? trendData : [0, 0, 0, 0, 0, 0, 0],
+            borderColor: '#f43f5e',
+            backgroundColor: 'rgba(244, 63, 94, 0.15)',
+            fill: true,
+            tension: 0.35,
+            borderWidth: 3,
+            pointBackgroundColor: '#fb7185',
+            pointRadius: 5,
+            pointHoverRadius: 7
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#94a3b8', font: { family: 'Prompt', size: 11 } } },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return ` ${context.dataset.label}: ${context.raw.toLocaleString()} 💎`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: { ticks: { color: '#94a3b8', font: { family: 'Prompt', size: 10 } }, grid: { color: 'rgba(255,255,255,0.05)' } },
+            y: { ticks: { color: '#94a3b8', font: { family: 'Prompt', size: 10 } }, grid: { color: 'rgba(255,255,255,0.08)' } }
+          }
+        }
+      });
+
+      // --- Chart 2: Team Share Distribution Doughnut Chart ---
+      const shareCtx = document.getElementById("weeklyTeamShareChart").getContext("2d");
+
+      const teamLabels = teamStats.map(item => item.team);
+      const teamData = teamStats.map(item => item.totalDiamond || 0);
+
+      const chartColors = [
+        '#6366f1', '#f59e0b', '#10b981', '#ec4899', '#3b82f6',
+        '#8b5cf6', '#14b8a6', '#f97316', '#06b6d4', '#e11d48'
+      ];
+
+      if (shareChartInstance) shareChartInstance.destroy();
+
+      shareChartInstance = new Chart(shareCtx, {
+        type: 'doughnut',
+        data: {
+          labels: teamLabels.length > 0 ? teamLabels : ['No Team Data'],
+          datasets: [{
+            data: teamData.length > 0 ? teamData : [1],
+            backgroundColor: teamData.length > 0 ? chartColors.slice(0, teamLabels.length) : ['#334155'],
+            borderWidth: 2,
+            borderColor: '#0f172a'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { color: '#cbd5e1', font: { family: 'Prompt', size: 11 }, padding: 12 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const val = context.raw || 0;
+                  return ` ${context.label}: ${val.toLocaleString()} 💎`;
+                }
+              }
+            }
+          },
+          cutout: '68%'
+        }
+      });
+    }
+
+    // 6. Render Team Rankings Table
+    function renderTeamRankings() {
+      const tbody = document.getElementById("weekly-team-tbody");
+      tbody.innerHTML = "";
+
+      const teamStats = (rawWeeklyData && rawWeeklyData.teamStats) ? [...rawWeeklyData.teamStats] : [];
+      document.getElementById("team-count-badge").textContent = `${teamStats.length} ${currentLang === 'th' ? 'ทีม' : 'Teams'}`;
+
+      if (teamStats.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">${translations[currentLang].noData}</td></tr>`;
+        return;
+      }
+
+      // Sort by Total Diamond descending
+      teamStats.sort((a, b) => (b.totalDiamond || 0) - (a.totalDiamond || 0));
+
+      teamStats.forEach((team, index) => {
+        const rank = index + 1;
+        let rankBadge = `<span class="font-bold text-slate-600">${rank}</span>`;
+
+        // Medals for top 3
+        if (rank === 1) rankBadge = `<span class="text-base" title="Gold Medal">🥇</span>`;
+        else if (rank === 2) rankBadge = `<span class="text-base" title="Silver Medal">🥈</span>`;
+        else if (rank === 3) rankBadge = `<span class="text-base" title="Bronze Medal">🥉</span>`;
+
+        const tr = document.createElement("tr");
+        tr.className = index % 2 === 0 ? "bg-white hover:bg-slate-50 transition" : "bg-slate-50/50 hover:bg-slate-100 transition";
+
+        tr.innerHTML = `
+          <td class="p-3 text-center">${rankBadge}</td>
+          <td class="p-3 font-bold text-slate-900">${escapeHtml(team.team || '-')}</td>
+          <td class="p-3 text-center font-semibold text-slate-600">${team.vjCount || 0}</td>
+          <td class="p-3 text-right font-black text-indigo-600">${(team.totalDiamond || 0).toLocaleString()}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 7. Render VJ Leaderboard Table
+    function renderVJLeaderboard() {
+      const tbody = document.getElementById("weekly-vj-tbody");
+      tbody.innerHTML = "";
+
+      const vjStatsList = (rawWeeklyData && rawWeeklyData.vjStatsList) ? [...rawWeeklyData.vjStatsList] : [];
+
+      if (vjStatsList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">${translations[currentLang].noData}</td></tr>`;
+        return;
+      }
+
+      // Sort by Diamond descending
+      vjStatsList.sort((a, b) => (b.diamond || 0) - (a.diamond || 0));
+
+      vjStatsList.forEach((vj, index) => {
+        const rank = index + 1;
+        let rankBadge = `<span class="font-extrabold text-slate-500">${rank}</span>`;
+
+        if (rank === 1) rankBadge = `<span class="text-base">🥇</span>`;
+        else if (rank === 2) rankBadge = `<span class="text-base">🥈</span>`;
+        else if (rank === 3) rankBadge = `<span class="text-base">🥉</span>`;
+
+        const tr = document.createElement("tr");
+        tr.className = "vj-row bg-white hover:bg-indigo-50/40 transition border-b border-slate-100";
+
+        tr.innerHTML = `
+          <td class="p-3 text-center">${rankBadge}</td>
+          <td class="p-3 font-bold text-slate-900 vj-name">${escapeHtml(vj.vjName || '-')}</td>
+          <td class="p-3 font-semibold text-slate-600">${escapeHtml(vj.team || '-')}</td>
+          <td class="p-3 text-right font-black text-rose-600">${(vj.diamond || 0).toLocaleString()}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Apply filter if search text exists
+      filterVJTable();
+    }
+
+    // 8. Live Search Filter for VJ Leaderboard
+    function filterVJTable() {
+      const searchVal = document.getElementById("vj-search-input").value.toLowerCase().trim();
+      const rows = document.querySelectorAll("#weekly-vj-tbody tr.vj-row");
+
+      rows.forEach(row => {
+        const nameText = row.querySelector(".vj-name") ? row.querySelector(".vj-name").textContent.toLowerCase() : "";
+        if (nameText.includes(searchVal)) {
+          row.style.display = "";
+        } else {
+          row.style.display = "none";
+        }
+      });
+    }
+
+    // 9. Real-time Language Switcher (TH <-> ZH)
+    function toggleLanguage() {
+      currentLang = currentLang === 'th' ? 'zh' : 'th';
+      updateLanguageUI();
+      if (rawWeeklyData) {
+        renderKPIs();
+        renderCharts();
+        renderTeamRankings();
+        renderVJLeaderboard();
+      }
+    }
+
+    function updateLanguageUI() {
+      const t = translations[currentLang];
+
+      document.getElementById("ui-weekly-title").textContent = t.weeklyTitle;
+      document.getElementById("ui-weekly-subtitle").textContent = t.weeklySubtitle;
+      document.getElementById("ui-label-sheet").innerHTML = `<i class="fa-solid fa-file-excel text-emerald-600 mr-1"></i>${t.labelSheet}`;
+      document.getElementById("ui-label-week").innerHTML = `<i class="fa-solid fa-clock text-indigo-600 mr-1"></i>${t.labelWeek}`;
+      document.getElementById("ui-btn-refresh").textContent = t.btnRefresh;
+      document.getElementById("ui-lang-text").textContent = t.langText;
+      document.getElementById("ui-loading-text").textContent = t.loadingText;
+
+      // Update Week Dropdown Option Texts
+      const weekSelect = document.getElementById("weekly-week-select");
+      for (let i = 0; i < weekSelect.options.length; i++) {
+        weekSelect.options[i].textContent = t.weekOptions[i];
+      }
+
+      // KPI Titles
+      document.getElementById("ui-kpi-total-diamonds").textContent = t.kpiTotalDiamonds;
+      document.getElementById("ui-kpi-daily-avg").textContent = t.kpiDailyAvg;
+      document.getElementById("ui-kpi-top-team").textContent = t.kpiTopTeam;
+      document.getElementById("ui-kpi-top-vj").textContent = t.kpiTopVJ;
+
+      // Chart Titles
+      document.getElementById("ui-chart-trend-title").innerHTML = `<i class="fa-solid fa-chart-line text-rose-400 mr-2"></i> ${t.chartTrendTitle}`;
+      document.getElementById("ui-chart-trend-sub").textContent = t.chartTrendSub;
+      document.getElementById("ui-chart-share-title").innerHTML = `<i class="fa-solid fa-chart-pie text-indigo-400 mr-2"></i> ${t.chartShareTitle}`;
+
+      // Table Headers
+      document.getElementById("ui-title-team-rank").innerHTML = `<i class="fa-solid fa-trophy text-amber-500 mr-2"></i> ${t.titleTeamRank}`;
+      document.getElementById("th-team-rank").textContent = t.thTeamRank;
+      document.getElementById("th-team-name").textContent = t.thTeamName;
+      document.getElementById("th-team-vjcount").textContent = t.thTeamVJCount;
+      document.getElementById("th-team-total").textContent = t.thTeamTotal;
+
+      document.getElementById("ui-title-vj-rank").innerHTML = `<i class="fa-solid fa-ranking-star text-indigo-600 mr-2"></i> ${t.titleVJRank}`;
+      document.getElementById("vj-search-input").placeholder = t.searchPlaceholder;
+      document.getElementById("th-vj-rank").textContent = t.thVJRank;
+      document.getElementById("th-vj-name").textContent = t.thVJName;
+      document.getElementById("th-vj-team").textContent = t.thVJTeam;
+      document.getElementById("th-vj-diamond").textContent = t.thVJDiamond;
+    }
+
+    // Utility: HTML Escaping
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Fallback Mock Generator (For standalone preview outside Google Workspace)
+    function getMockWeeklyData(weekNum) {
+      return {
+        topTeam: { team: "TEAM ALPHA", totalDiamond: 125000 },
+        topVJ: { vjName: "VJ Cherry", diamond: 45000 },
+        dailyTotalsMap: {
+          "1": 12000, "2": 18500, "3": 15000, "4": 22000, "5": 21000, "6": 28000, "7": 25000
+        },
+        teamStats: [
+          { team: "TEAM ALPHA", vjCount: 6, totalDiamond: 125000 },
+          { team: "TEAM BRAVO", vjCount: 5, totalDiamond: 98000 },
+          { team: "TEAM CHARLIE", vjCount: 4, totalDiamond: 72000 },
+          { team: "TEAM DELTA", vjCount: 4, totalDiamond: 45000 }
+        ],
+        vjStatsList: [
+          { vjName: "VJ Cherry", team: "TEAM ALPHA", diamond: 45000 },
+          { vjName: "VJ Jasmine", team: "TEAM BRAVO", diamond: 38000 },
+          { vjName: "VJ Rose", team: "TEAM ALPHA", diamond: 32000 },
+          { vjName: "VJ Amber", team: "TEAM CHARLIE", diamond: 28000 },
+          { vjName: "VJ Grace", team: "TEAM BRAVO", diamond: 24000 },
+          { vjName: "VJ Melody", team: "TEAM DELTA", diamond: 19000 },
+          { vjName: "VJ Iris", team: "TEAM ALPHA", diamond: 15000 }
+        ]
+      };
+    }
+
+function populateSheetSelect(sheetList) {
+  const select = document.getElementById("weekly-sheet-select");
+  select.innerHTML = "";
+
+  // 1. แปลงข้อความ JSON String
+  if (typeof sheetList === 'string') {
+    try {
+      sheetList = JSON.parse(sheetList);
+    } catch (e) {
+      console.error("JSON parse error:", e);
+    }
+  }
+
+  // 2. ค้นหา Property ภายใน Object ทุกตัวที่เป็น Array โดยอัตโนมัติ
+  let actualList = [];
+  if (Array.isArray(sheetList)) {
+    actualList = sheetList;
+  } else if (sheetList && typeof sheetList === 'object') {
+    for (let key in sheetList) {
+      if (Array.isArray(sheetList[key])) {
+        actualList = sheetList[key];
+        break;
+      }
+    }
+    // หากไม่พบ Array ใน Property ใดเลย ให้แปลงค่า Values ทั้งหมดเป็น Array
+    if (actualList.length === 0) {
+      actualList = Object.values(sheetList);
+    }
+  }
+
+  // 3. กรองคีย์ขยะ เช่น true, false, "success", ค่าว่าง ออก
+  actualList = actualList.filter(item => {
+    if (item === null || item === undefined || typeof item === 'boolean') return false;
+    const str = String(item).trim().toLowerCase();
+    return str !== '' && str !== 'true' && str !== 'false' && str !== 'success' && str !== 'error';
+  });
+
+  // หากไม่พบข้อมูลชีต ให้หยุดตัวหมุนโหลดเพื่อไม่ให้หน้าจอค้าง
+  if (actualList.length === 0) {
+    select.innerHTML = `<option value="">ไม่พบข้อมูลชีต</option>`;
+    document.getElementById("weekly-loading-state").classList.add("hidden");
+    return;
+  }
+
+  // 4. ค้นหาและเลือกเดือนปัจจุบันให้อัตโนมัติ
+  const now = new Date();
+  const monthNamesEn = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+  const monthNamesTh = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  
+  const currentMonthEn = monthNamesEn[now.getMonth()];
+  const currentMonthTh = monthNamesTh[now.getMonth()];
+
+  let matchedIndex = 0;
+
+  actualList.forEach((sheetName, index) => {
+    const strName = String(sheetName).trim();
+    const opt = document.createElement("option");
+    opt.value = strName;
+    opt.textContent = strName;
+    select.appendChild(opt);
+
+    const upperStr = strName.toUpperCase();
+    if (upperStr.includes(currentMonthEn) || upperStr.includes(currentMonthTh)) {
+      matchedIndex = index;
+    }
+  });
+
+  select.selectedIndex = matchedIndex;
+
+  // โหลดข้อมูล Dashboard ตามชีตที่เลือก
+  fetchWeeklyDashboardData();
+}
+
+function fetchWeeklyDashboardData() {
+  const sheetName = document.getElementById("weekly-sheet-select").value;
+  const weekNumber = parseInt(document.getElementById("weekly-week-select").value, 10);
+
+  // ถ้ารายชื่อชีตว่างเปล่า ให้ซ่อนหน้าต่างโหลดและไม่ส่ง Request ไป Backend
+  if (!sheetName) {
+    document.getElementById("weekly-loading-state").classList.add("hidden");
+    return;
+  }
+
+  // แสดงสถานะ Loading
+  document.getElementById("weekly-loading-state").classList.remove("hidden");
+  document.getElementById("weekly-dashboard-content").classList.add("hidden");
+
+  if (typeof google !== 'undefined' && google.script && google.script.run) {
+    google.script.run
+      .withSuccessHandler(onWeeklyDataReceived)
+      .withFailureHandler(handleBackendError)
+      .getWeeklyStatsSummary(sheetName, weekNumber);
+  } else {
+    setTimeout(() => {
+      const mockRes = getMockWeeklyData(weekNumber);
+      onWeeklyDataReceived(mockRes);
+    }, 600);
+  }
+}
+
+// --- 1. HELPER FUNCTIONS (ฟังก์ชันจัดการการดึงข้อความและตัวเลข) ---
+function getStr(obj, keys, defaultVal = '-') {
+  if (!obj || typeof obj !== 'object') return defaultVal;
+
+  // ค้นหาตามรายชื่อ Key ที่ระบุ
+  for (let k of keys) {
+    if (obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim() !== "") {
+      return String(obj[k]).trim();
+    }
+  }
+
+  // ค้นหาอัตโนมัติจาก Key ที่มีคำว่า name, team, vj, group
+  for (let key of Object.keys(obj)) {
+    const lowerKey = key.toLowerCase();
+    if (lowerKey.includes('name') || lowerKey.includes('team') || lowerKey.includes('vj') || lowerKey.includes('group')) {
+      const val = obj[key];
+      if (val !== undefined && val !== null && String(val).trim() !== "") {
+        return String(val).trim();
+      }
+    }
+  }
+
+  return defaultVal;
+}
+
+function getVal(obj, keys, defaultVal = 0) {
+  if (!obj || typeof obj !== 'object') return defaultVal;
+
+  for (let k of keys) {
+    if (obj[k] !== undefined && obj[k] !== null && obj[k] !== "") {
+      const cleaned = String(obj[k]).replace(/,/g, '').replace(/\s/g, '');
+      const num = Number(cleaned);
+      if (!isNaN(num)) return num;
+    }
+  }
+
+  for (let key of Object.keys(obj)) {
+    const lowerKey = key.toLowerCase();
+    if (
+      lowerKey.includes('diamond') ||
+      lowerKey.includes('total') ||
+      lowerKey.includes('sum') ||
+      lowerKey.includes('amount') ||
+      lowerKey.includes('point') ||
+      lowerKey.includes('score')
+    ) {
+      const val = obj[key];
+      if (val !== undefined && val !== null && val !== "") {
+        const cleaned = String(val).replace(/,/g, '').replace(/\s/g, '');
+        const num = Number(cleaned);
+        if (!isNaN(num)) return num;
+      }
+    }
+  }
+
+  return defaultVal;
+}
+
+// --- 2. RENDER FUNCTIONS (ฟังก์ชันแสดงผลข้อมูลทั้งหมด) ---
+function renderKPIs() {
+  if (!rawWeeklyData) return;
+
+  const teamStats = rawWeeklyData.teamStats || rawWeeklyData.teams || [];
+  const vjStatsList = rawWeeklyData.vjStatsList || rawWeeklyData.vjs || rawWeeklyData.vjList || [];
+  const dailyTotalsMap = rawWeeklyData.dailyTotalsMap || rawWeeklyData.dailyTotals || {};
+
+  const diamondKeys = ['diamond', 'totalDiamond', 'totalDiamonds', 'diamonds', 'total', 'amount', 'val', 'sum'];
+
+  // คำนวณยอดรวม Diamond
+  let totalDiamonds = 0;
+  const dailyVals = Object.values(dailyTotalsMap).map(v => Number(String(v).replace(/,/g, '')) || 0);
+  if (dailyVals.length > 0) {
+    totalDiamonds = dailyVals.reduce((sum, v) => sum + v, 0);
+  }
+
+  if (totalDiamonds === 0 && vjStatsList.length > 0) {
+    totalDiamonds = vjStatsList.reduce((sum, item) => sum + getVal(item, diamondKeys), 0);
+  }
+  if (totalDiamonds === 0 && teamStats.length > 0) {
+    totalDiamonds = teamStats.reduce((sum, item) => sum + getVal(item, diamondKeys), 0);
+  }
+
+  const dayKeys = Object.keys(dailyTotalsMap);
+  const daysCount = dayKeys.length > 0 ? dayKeys.length : 7;
+  const dailyAvg = daysCount > 0 ? Math.round(totalDiamonds / daysCount) : 0;
+
+  // ทีมอันดับ 1
+  let topTeamName = "-";
+  let topTeamDiamond = 0;
+  if (rawWeeklyData.topTeam) {
+    if (typeof rawWeeklyData.topTeam === 'object') {
+      topTeamName = getStr(rawWeeklyData.topTeam, ['team', 'teamName', 'name', 'group']);
+      topTeamDiamond = getVal(rawWeeklyData.topTeam, diamondKeys);
+    } else {
+      topTeamName = String(rawWeeklyData.topTeam);
+    }
+  }
+  if ((topTeamName === "-" || topTeamDiamond === 0) && teamStats.length > 0) {
+    const sortedTeams = [...teamStats].sort((a, b) => getVal(b, diamondKeys) - getVal(a, diamondKeys));
+    topTeamName = getStr(sortedTeams[0], ['team', 'teamName', 'name', 'group']);
+    topTeamDiamond = getVal(sortedTeams[0], diamondKeys);
+  }
+
+  // VJ อันดับ 1
+  let topVJName = "-";
+  let topVJDiamond = 0;
+  if (rawWeeklyData.topVJ) {
+    if (typeof rawWeeklyData.topVJ === 'object') {
+      topVJName = getStr(rawWeeklyData.topVJ, ['vjName', 'name', 'vj', 'vj_name']);
+      topVJDiamond = getVal(rawWeeklyData.topVJ, diamondKeys);
+    } else {
+      topVJName = String(rawWeeklyData.topVJ);
+    }
+  }
+  if ((topVJName === "-" || topVJDiamond === 0) && vjStatsList.length > 0) {
+    const sortedVJs = [...vjStatsList].sort((a, b) => getVal(b, diamondKeys) - getVal(a, diamondKeys));
+    topVJName = getStr(sortedVJs[0], ['vjName', 'name', 'vj', 'vj_name']);
+    topVJDiamond = getVal(sortedVJs[0], diamondKeys);
+  }
+
+  document.getElementById("kpi-total-diamonds-val").textContent = totalDiamonds.toLocaleString();
+  document.getElementById("kpi-daily-avg-val").textContent = dailyAvg.toLocaleString();
+  document.getElementById("kpi-top-team-val").textContent = topTeamName;
+  document.getElementById("kpi-top-team-sub").textContent = topTeamDiamond.toLocaleString() + " Diamond";
+  document.getElementById("kpi-top-vj-val").textContent = topVJName;
+  document.getElementById("kpi-top-vj-sub").textContent = topVJDiamond.toLocaleString() + " Diamond";
+}
+
+function renderCharts() {
+  if (!rawWeeklyData) return;
+
+  const t = translations[currentLang];
+  const dailyTotalsMap = rawWeeklyData.dailyTotalsMap || rawWeeklyData.dailyTotals || {};
+  const teamStats = rawWeeklyData.teamStats || rawWeeklyData.teams || [];
+
+  // Line Chart
+  const trendCtx = document.getElementById("weeklyDailyTrendChart").getContext("2d");
+  const dayKeys = Object.keys(dailyTotalsMap).sort((a, b) => Number(a) - Number(b));
+  const trendLabels = dayKeys.map(d => `${currentLang === 'th' ? 'วันที่' : 'Day'} ${d}`);
+  const trendData = dayKeys.map(d => Number(String(dailyTotalsMap[d]).replace(/,/g, '')) || 0);
+
+  if (trendChartInstance) trendChartInstance.destroy();
+
+  trendChartInstance = new Chart(trendCtx, {
+    type: 'line',
+    data: {
+      labels: trendLabels,
+      datasets: [{
+        label: t.chartTrendLabel,
+        data: trendData,
+        borderColor: '#f43f5e',
+        backgroundColor: 'rgba(244, 63, 94, 0.15)',
+        fill: true,
+        tension: 0.35,
+        borderWidth: 3,
+        pointBackgroundColor: '#fb7185',
+        pointRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#94a3b8' } } },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.08)' } }
+      }
+    }
+  });
+
+  // Doughnut Chart
+  const shareCtx = document.getElementById("weeklyTeamShareChart").getContext("2d");
+  const diamondKeys = ['totalDiamond', 'diamond', 'totalDiamonds', 'diamonds', 'total', 'amount', 'val', 'sum'];
+  const teamLabels = teamStats.map(item => getStr(item, ['team', 'teamName', 'name', 'group']));
+  const teamData = teamStats.map(item => getVal(item, diamondKeys));
+  const chartColors = ['#6366f1', '#f59e0b', '#10b981', '#ec4899', '#3b82f6', '#8b5cf6', '#14b8a6', '#f97316'];
+
+  if (shareChartInstance) shareChartInstance.destroy();
+
+  shareChartInstance = new Chart(shareCtx, {
+    type: 'doughnut',
+    data: {
+      labels: teamLabels.length > 0 ? teamLabels : ['No Team Data'],
+      datasets: [{
+        data: teamData.length > 0 ? teamData : [1],
+        backgroundColor: teamData.length > 0 ? chartColors.slice(0, teamLabels.length) : ['#334155'],
+        borderWidth: 2,
+        borderColor: '#0f172a'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#cbd5e1' } }
+      },
+      cutout: '68%'
+    }
+  });
+}
+
+function renderTeamRankings() {
+  const tbody = document.getElementById("weekly-team-tbody");
+  tbody.innerHTML = "";
+
+  const teamStats = (rawWeeklyData && (rawWeeklyData.teamStats || rawWeeklyData.teams)) ? [...(rawWeeklyData.teamStats || rawWeeklyData.teams)] : [];
+  document.getElementById("team-count-badge").textContent = `${teamStats.length} ${currentLang === 'th' ? 'ทีม' : 'Teams'}`;
+
+  if (teamStats.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">${translations[currentLang].noData}</td></tr>`;
+    return;
+  }
+
+  const diamondKeys = ['totalDiamond', 'diamond', 'totalDiamonds', 'diamonds', 'total', 'amount', 'val', 'sum'];
+  teamStats.sort((a, b) => getVal(b, diamondKeys) - getVal(a, diamondKeys));
+
+  teamStats.forEach((team, index) => {
+    const rank = index + 1;
+    let rankBadge = `<span class="font-bold text-slate-600">${rank}</span>`;
+    if (rank === 1) rankBadge = `🥇`;
+    else if (rank === 2) rankBadge = `🥈`;
+    else if (rank === 3) rankBadge = `🥉`;
+
+    const teamName = getStr(team, ['team', 'teamName', 'name', 'group']);
+    const vjCount = getVal(team, ['vjCount', 'count', 'vjs', 'members']);
+    const totalDiamond = getVal(team, diamondKeys);
+
+    const tr = document.createElement("tr");
+    tr.className = index % 2 === 0 ? "bg-white hover:bg-slate-50 transition" : "bg-slate-50/50 hover:bg-slate-100 transition";
+    tr.innerHTML = `
+      <td class="p-3 text-center">${rankBadge}</td>
+      <td class="p-3 font-bold text-slate-900">${escapeHtml(teamName)}</td>
+      <td class="p-3 text-center font-semibold text-slate-600">${vjCount}</td>
+      <td class="p-3 text-right font-black text-indigo-600">${totalDiamond.toLocaleString()}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderVJLeaderboard() {
+  const tbody = document.getElementById("weekly-vj-tbody");
+  tbody.innerHTML = "";
+
+  const vjStatsList = (rawWeeklyData && (rawWeeklyData.vjStatsList || rawWeeklyData.vjs || rawWeeklyData.vjList)) ? [...(rawWeeklyData.vjStatsList || rawWeeklyData.vjs || rawWeeklyData.vjList)] : [];
+
+  if (vjStatsList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">${translations[currentLang].noData}</td></tr>`;
+    return;
+  }
+
+  const diamondKeys = ['diamond', 'totalDiamond', 'totalDiamonds', 'diamonds', 'total', 'amount', 'val', 'sum'];
+  vjStatsList.sort((a, b) => getVal(b, diamondKeys) - getVal(a, diamondKeys));
+
+  vjStatsList.forEach((vj, index) => {
+    const rank = index + 1;
+    let rankBadge = `<span class="font-extrabold text-slate-500">${rank}</span>`;
+    if (rank === 1) rankBadge = `🥇`;
+    else if (rank === 2) rankBadge = `🥈`;
+    else if (rank === 3) rankBadge = `🥉`;
+
+    const vjName = getStr(vj, ['vjName', 'name', 'vj', 'vj_name']);
+    const teamName = getStr(vj, ['team', 'teamName', 'group']);
+    const diamond = getVal(vj, diamondKeys);
+
+    const tr = document.createElement("tr");
+    tr.className = "vj-row bg-white hover:bg-indigo-50/40 transition border-b border-slate-100";
+    tr.innerHTML = `
+      <td class="p-3 text-center">${rankBadge}</td>
+      <td class="p-3 font-bold text-slate-900 vj-name">${escapeHtml(vjName)}</td>
+      <td class="p-3 font-semibold text-slate-600">${escapeHtml(teamName)}</td>
+      <td class="p-3 text-right font-black text-rose-600">${diamond.toLocaleString()}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  filterVJTable();
+}
+
+
+  </script>
+</body>
+</html>
