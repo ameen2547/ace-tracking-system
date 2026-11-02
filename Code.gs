@@ -672,24 +672,8 @@ function getAdminSession_(token) {
   }
 }
 
-function hashAdminPasscode_(passcode) {
-  const salt = Utilities.getUuid().replace(/-/g, '');
-  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + String(passcode || ''), Utilities.Charset.UTF_8);
-  const hex = digest.map(byte => ('0' + ((byte + 256) % 256).toString(16)).slice(-2)).join('');
-  return 'sha256$' + salt + '$' + hex;
-}
-
 function adminPasscodeMatches_(passcode, storedValue) {
-  const stored = String(storedValue || '');
-  if (!stored.startsWith('sha256$')) return stored === String(passcode || '');
-  const parts = stored.split('$');
-  if (parts.length !== 3) return false;
-  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, parts[1] + String(passcode || ''), Utilities.Charset.UTF_8);
-  const candidate = digest.map(byte => ('0' + ((byte + 256) % 256).toString(16)).slice(-2)).join('');
-  if (candidate.length !== parts[2].length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < candidate.length; i++) mismatch |= candidate.charCodeAt(i) ^ parts[2].charCodeAt(i);
-  return mismatch === 0;
+  return String(storedValue || '') === String(passcode || '');
 }
 
 function requireAdminSession_(token, allowedRoles) {
@@ -775,7 +759,6 @@ function verifyAdminAccess(passcode, username) {
       const role = String(data[i][3] || 'ADMIN');
 
       if (uName === cleanUser && adminPasscodeMatches_(cleanPass, uPass)) {
-        if (!uPass.startsWith('sha256$')) adminSheet.getRange(i + 1, 2).setValue(hashAdminPasscode_(cleanPass));
         saveLog_('ADMIN_LOGIN', `แอดมิน ${dispName} (${uName}) เข้าสู่ระบบสำเร็จ`, dispName, 'SUCCESS');
         const session = createAdminSession_(uName, dispName, role);
         return { success: true, message: `ยินดีต้อนรับ ${dispName}`, displayName: dispName, role: session.role, token: session.token, expiresIn: session.expiresIn };
@@ -854,7 +837,7 @@ function initAdminUsersSheet_() {
       const usernameIndex = rows.findIndex(row => String(row[0] || '').trim().toLowerCase() === bootstrapUsername);
       const defaultIndex = rows.findIndex(row => String(row[1] || '').trim() === '1234');
       const now = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-      const adminRecord = [bootstrapUsername, hashAdminPasscode_(bootstrapPasscode), 'Super Admin', 'SUPER_ADMIN', now];
+      const adminRecord = [bootstrapUsername, bootstrapPasscode, 'Super Admin', 'SUPER_ADMIN', now];
 
       if (usernameIndex >= 0) {
         adminSheet.getRange(usernameIndex + 2, 1, 1, 5).setValues([adminRecord]);
@@ -916,7 +899,7 @@ function createNewAdminUser(username, passcode, displayName, role, adminUser, se
     }
 
     const createdAt = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-    adminSheet.appendRow([cleanUsername, hashAdminPasscode_(String(passcode).trim()), String(displayName).trim(), cleanRole, createdAt]);
+    adminSheet.appendRow([cleanUsername, String(passcode).trim(), String(displayName).trim(), cleanRole, createdAt]);
 
     saveLog_('ADD_ADMIN', `เพิ่มแอดมินใหม่: ${displayName} (${cleanUsername}) บทบาท: ${role}`, session.displayName || adminUser || 'Super Admin', 'SUCCESS');
     return { success: true, message: `เพิ่มแอดมิน "${displayName}" เรียบร้อยแล้ว` };

@@ -29,14 +29,14 @@ The Apps Script reads targets directly from the bound spreadsheet's `KPI_Targets
 1. Back up the Google Spreadsheet and existing Apps Script project.
 2. Open the spreadsheet and use **Extensions → Apps Script** so the script is bound to the intended spreadsheet. The backend uses `SpreadsheetApp.getActiveSpreadsheet()` in multiple places.
 3. Create or replace the `.gs` and HTML files above. Apps Script HTML filenames omit the `.html` suffix in `createTemplateFromFile()` and `createHtmlOutputFromFile()` calls; preserve the base names and capitalization shown here.
-4. Before first Admin login, set Script Properties `ACE_INITIAL_ADMIN_USERNAME` and `ACE_INITIAL_ADMIN_PASSCODE`. Use a unique passcode with at least 12 characters. On first login, the setup routine updates an account with the same username, replaces an old `1234` account, or appends a new Super Admin; it stores a salted SHA-256 hash and deletes both bootstrap properties only after the sheet write succeeds.
-5. Existing Admin_Users records with passcodes other than `1234` remain usable; each is upgraded to a salted hash after its next successful login. The known weak passcode `1234` is rejected. To migrate an existing default account, set both bootstrap properties before attempting login; the first login replaces the old default row. Back up the sheet first.
+4. Before first Admin login, set Script Properties `ACE_INITIAL_ADMIN_USERNAME` and `ACE_INITIAL_ADMIN_PASSCODE`. Use a unique passcode with at least 12 characters. On first login, the setup routine updates an account with the same username, replaces an old `1234` account, or appends a new Super Admin; the passcode is written as plain text to `Admin_Users` and both bootstrap properties are deleted only after the sheet write succeeds.
+5. Admin_Users passcodes are stored and compared as plain text. Existing `sha256$...` values cannot be recovered and will not authenticate; reset each affected account through the bootstrap flow before using this version. The known weak passcode `1234` is rejected. Back up the sheet first.
 6. Check project timezone, spreadsheet tab names/headers, existing triggers and deployment settings against the original project. This bundle does not include a manifest because the source does not establish the intended timezone or OAuth scopes.
 7. Use a test copy first. Review and authorize requested OAuth scopes using an account with the required access.
 8. Deploy a test Web App version and verify each route, reads, writes, exports, and role behavior with non-production data.
 9. After the test copy passes, update the intended deployment. Retain the previous deployment and source backup for rollback.
 
-Admin sessions use a token stored in Apps Script `CacheService` for up to six hours. The browser keeps only that opaque token in `sessionStorage` for the current tab; each page validates it with the server before loading data. This keeps the login active while navigating between system pages in the same tab. Signing out from the main dashboard or shared sidebar revokes the cached session. New Admin passcodes must be at least 12 characters. Legacy plaintext credentials are converted on successful login; the existing Admin_Users column layout stays the same.
+Admin sessions use a token stored in Apps Script `CacheService` for up to six hours. The browser keeps only that opaque token in `sessionStorage` for the current tab; each page validates it with the server before loading data. This keeps the login active while navigating between system pages in the same tab. Signing out from the main dashboard or shared sidebar revokes the cached session. New Admin passcodes must be at least 12 characters. The `Admin_Users` sheet stores passcodes as readable plain text; anyone with access to that sheet can read them. Do not share the spreadsheet broadly, and do not reuse these passcodes for other services.
 
 The main Dashboard and standalone report pages have sidebars that collapse on desktop and open as a drawer on mobile. Navigation between routes validates the existing cached session and does not ask for credentials again while it remains valid.
 
@@ -54,7 +54,7 @@ The main Dashboard and standalone report pages have sidebars that collapse on de
 
 ## Remaining checks before production
 
-- Existing legacy passcodes remain plaintext until their owners log in successfully. Configure the bootstrap properties and rotate any old default credentials before deployment.
+- Admin passcodes are stored as plaintext by this configuration. Limit `Admin_Users` and spreadsheet access to trusted administrators; consider reverting to one-way password hashing before production use.
 - Login rate limiting and account lockout are not implemented; deployment access settings must still limit who can reach the Web App.
 - Complete sheet schemas, write behavior, deployment settings and KPI/bonus business rules still require validation against a copied workbook and the live Apps Script project. The read-only `KPI_Targets` tab header and data shape were verified on 2026-11-02.
 - Static JavaScript parsing and route checks pass. No live Google Sheets, browser functional, or deployment test has been performed.
@@ -75,7 +75,7 @@ The main Dashboard and standalone report pages have sidebars that collapse on de
 ## KPI target and TikTok profile integration (2026-11-02)
 
 - Monthly KPI targets are read from the `KPI_Targets` tab using VJ name, target diamond and the optional month value in column E. Month-specific values override the default target for the same VJ, matching the existing source behavior.
-- VJ profile lookup reads the `vj mc all` source tab using its header labels when present, with the existing B (VJ name) and H (TikTok ID or image URL) layout as fallback.
+- VJ profile lookup reads the `vj mc all` source tab using B (VJ name) and H (TikTok ID); profile images are resolved from the TikTok ID.
 - Reports now resolve target and profile data against normalized VJ names, and profile pages receive a TikTok ID plus a profile image URL derived from that ID when no direct image URL is stored.
 - The profile image URL uses the source project's existing `unavatar.io/tiktok/{id}` provider. Availability depends on that external service and TikTok profile visibility.
 - This update has not been tested against a live Google Sheet or deployment.
