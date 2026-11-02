@@ -390,10 +390,14 @@
     // 1. Fetch Sheet List from Google Apps Script Backend (getSheetList)
     function fetchSheetList() {
       if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler(populateSheetSelect)
+        requireACELoginOnStartup_(sessionToken => google.script.run
+          .withSuccessHandler(result => {
+            const names = Array.isArray(result) ? result : (result && result.success ? result.sheetNames : []);
+            if (!Array.isArray(names)) return handleBackendError(new Error(result && result.error || 'ไม่สามารถอ่านรายชื่อชีตได้'));
+            populateSheetSelect(names);
+          })
           .withFailureHandler(handleBackendError)
-          .getSheetList();
+          .getSheetList(sessionToken), handleBackendError);
       } else {
         // Fallback Mocking for Standalone Testing
         console.warn("Google Apps Script environment not detected. Loading Mock Sheets.");
@@ -432,10 +436,10 @@
       document.getElementById("weekly-dashboard-content").classList.add("hidden");
 
       if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run
+        requireACELoginOnStartup_(sessionToken => google.script.run
           .withSuccessHandler(onWeeklyDataReceived)
           .withFailureHandler(handleBackendError)
-          .getWeeklyStatsSummary(sheetName, weekNumber);
+          .getWeeklyStatsSummary(sheetName, weekNumber, 'ALL', sessionToken), handleBackendError);
       } else {
         // Fallback Mock Data Simulation
         setTimeout(() => {
@@ -694,7 +698,7 @@
 
         tr.innerHTML = `
           <td class="p-3 text-center">${rankBadge}</td>
-          <td class="p-3 font-bold text-slate-900 vj-name">${escapeHtml(vj.vjName || '-')}</td>
+          <td class="p-3 font-bold text-slate-900 vj-name"><img src="${escapeHtml(vj.avatarUrl || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(vj.vjName || 'VJ') + '&background=4f46e5&color=fff'))}" data-vj-name="${escapeHtml(vj.vjName || '')}" alt="" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name='+encodeURIComponent(this.dataset.vjName||'VJ')+'&background=4f46e5&color=fff'" class="inline-block w-8 h-8 rounded-full object-cover mr-2 align-middle">${escapeHtml(vj.vjName || '-')} ${vj.tiktokId ? '<small>@'+escapeHtml(vj.tiktokId)+'</small>' : ''}</td>
           <td class="p-3 font-semibold text-slate-600">${escapeHtml(vj.team || '-')}</td>
           <td class="p-3 text-right font-black text-rose-600">${(vj.diamond || 0).toLocaleString()}</td>
         `;
@@ -723,6 +727,7 @@
     // 9. Real-time Language Switcher (TH <-> ZH)
     function toggleLanguage() {
       currentLang = currentLang === 'th' ? 'zh' : 'th';
+      if (window.setACECurrentLanguage_) window.setACECurrentLanguage_(currentLang);
       updateLanguageUI();
       if (rawWeeklyData) {
         renderKPIs();
@@ -734,6 +739,7 @@
 
     function updateLanguageUI() {
       const t = translations[currentLang];
+      if (window.setACECurrentLanguage_) window.setACECurrentLanguage_(currentLang);
 
       document.getElementById("ui-weekly-title").textContent = t.weeklyTitle;
       document.getElementById("ui-weekly-subtitle").textContent = t.weeklySubtitle;
@@ -1180,7 +1186,7 @@ function renderVJLeaderboard() {
     tr.className = "vj-row bg-white hover:bg-indigo-50/40 transition border-b border-slate-100";
     tr.innerHTML = `
       <td class="p-3 text-center">${rankBadge}</td>
-      <td class="p-3 font-bold text-slate-900 vj-name">${escapeHtml(vjName)}</td>
+      <td class="p-3 font-bold text-slate-900 vj-name"><img src="${escapeHtml(vj.avatarUrl || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(vjName || 'VJ') + '&background=4f46e5&color=fff'))}" data-vj-name="${escapeHtml(vjName)}" alt="" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name='+encodeURIComponent(this.dataset.vjName||'VJ')+'&background=4f46e5&color=fff'" class="inline-block w-8 h-8 rounded-full object-cover mr-2 align-middle">${escapeHtml(vjName)} ${vj.tiktokId ? '<small>@'+escapeHtml(vj.tiktokId)+'</small>' : ''}</td>
       <td class="p-3 font-semibold text-slate-600">${escapeHtml(teamName)}</td>
       <td class="p-3 text-right font-black text-rose-600">${diamond.toLocaleString()}</td>
     `;

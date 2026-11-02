@@ -256,7 +256,7 @@
     }
 
     function loadSheetList() {
-      google.script.run.withSuccessHandler(res => {
+      requireACELoginOnStartup_(sessionToken => google.script.run.withSuccessHandler(res => {
         if (res.success) {
           const select = document.getElementById('sheet-select');
           select.innerHTML = '';
@@ -268,14 +268,14 @@
           });
           fetchDailyData();
         }
-      }).getSheetList();
+      }).getSheetList(sessionToken), error => console.error(error));
     }
 
     function fetchDailyData() {
       const sheet = document.getElementById('sheet-select').value;
       const day = document.getElementById('day-select').value;
       
-      google.script.run.withSuccessHandler(renderData).getDailySummaryData(sheet, day);
+      requireACELoginOnStartup_(sessionToken => google.script.run.withSuccessHandler(renderData).getDailySummaryData(sheet, day, sessionToken));
     }
 
     function renderData(res) {
@@ -308,9 +308,9 @@
         <div class="flex items-center justify-between p-3 rounded-xl bg-slate-800/80 border border-slate-700">
           <div class="flex items-center gap-3">
             <span class="text-xl">${badges[idx] || (idx + 1)}</span>
-            <span class="font-bold text-amber-300 text-sm">${t.teamName}</span>
+            <span class="font-bold text-amber-300 text-sm">${window.aceEscapeHtml_(t.teamName)}</span>
           </div>
-          <span class="font-extrabold text-white text-sm">${t.totalDiamonds.toLocaleString()} 💎</span>
+          <span class="font-extrabold text-white text-sm">${window.aceEscapeHtml_(t.totalDiamonds.toLocaleString())} 💎</span>
         </div>
       `).join('') || '<p class="text-xs text-slate-500">ไม่มีข้อมูล</p>';
 
@@ -319,11 +319,11 @@
           <div class="flex items-center gap-3">
             <span class="text-xl">${badges[idx] || (idx + 1)}</span>
             <div>
-              <p class="font-bold text-emerald-300 text-sm">${v.name}</p>
-              <p class="text-[10px] text-slate-400">${v.team}</p>
+              <p class="font-bold text-emerald-300 text-sm">${window.aceEscapeHtml_(v.name)}</p>
+              <p class="text-[10px] text-slate-400">${window.aceEscapeHtml_(v.team)}</p>
             </div>
           </div>
-          <span class="font-extrabold text-white text-sm">${v.diamonds.toLocaleString()} 💎</span>
+          <span class="font-extrabold text-white text-sm">${window.aceEscapeHtml_(v.diamonds.toLocaleString())} 💎</span>
         </div>
       `).join('') || '<p class="text-xs text-slate-500">ไม่มีข้อมูล</p>';
     }
@@ -371,11 +371,11 @@
       const teamTbody = document.getElementById('team-table-body');
       teamTbody.innerHTML = (teams || []).map(t => `
         <tr class="hover:bg-slate-800/50">
-          <td class="p-3 font-bold">${t.rank}</td>
-          <td class="p-3 text-amber-300 font-bold">${t.teamName}</td>
-          <td class="p-3">${t.vjCount} คน</td>
-          <td class="p-3 font-bold text-emerald-400">${t.totalDiamonds.toLocaleString()}</td>
-          <td class="p-3">${t.avgPerVJ.toLocaleString()}</td>
+          <td class="p-3 font-bold">${window.aceEscapeHtml_(t.rank)}</td>
+          <td class="p-3 text-amber-300 font-bold">${window.aceEscapeHtml_(t.teamName)}</td>
+          <td class="p-3">${window.aceEscapeHtml_(t.vjCount)} คน</td>
+          <td class="p-3 font-bold text-emerald-400">${window.aceEscapeHtml_(t.totalDiamonds.toLocaleString())}</td>
+          <td class="p-3">${window.aceEscapeHtml_(t.avgPerVJ.toLocaleString())}</td>
         </tr>
       `).join('');
 
@@ -388,11 +388,11 @@
 
         return `
           <tr class="hover:bg-slate-800/50">
-            <td class="p-3 font-bold">${v.rank}</td>
-            <td class="p-3 font-bold text-slate-100">${v.name}</td>
-            <td class="p-3 text-slate-400">${v.team}</td>
-            <td class="p-3 font-bold text-emerald-400">${v.diamonds.toLocaleString()}</td>
-            <td class="p-3 text-slate-400">${Math.round(v.dailyTarget).toLocaleString()}</td>
+            <td class="p-3 font-bold">${window.aceEscapeHtml_(v.rank)}</td>
+            <td class="p-3 font-bold text-slate-100">${window.aceEscapeHtml_(v.name)}</td>
+            <td class="p-3 text-slate-400">${window.aceEscapeHtml_(v.team)}</td>
+            <td class="p-3 font-bold text-emerald-400">${window.aceEscapeHtml_(v.diamonds.toLocaleString())}</td>
+            <td class="p-3 text-slate-400">${window.aceEscapeHtml_(Math.round(v.dailyTarget).toLocaleString())}</td>
             <td class="p-3">
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}">
                 ${rate.toFixed(1)}%
@@ -405,6 +405,7 @@
 
     function switchLanguage(lang) {
       currentLang = lang;
+      if (window.setACECurrentLanguage_) window.setACECurrentLanguage_(lang);
       const dict = i18n[lang] || i18n.TH;
 
       document.getElementById('txt-title').textContent = dict.title;
@@ -440,9 +441,9 @@ function renderLeaderboards(teams, vjs) {
     <div class="flex items-center justify-between p-3 rounded-xl bg-slate-800/80 border border-slate-700">
       <div class="flex items-center gap-3">
         <span class="text-xl">${badges[idx] || (idx + 1)}</span>
-        <span class="font-bold text-amber-300 text-sm">${t.teamName}</span>
+        <span class="font-bold text-amber-300 text-sm">${window.aceEscapeHtml_(t.teamName)}</span>
       </div>
-      <span class="font-extrabold text-white text-sm">${t.totalDiamonds.toLocaleString()} 💎</span>
+      <span class="font-extrabold text-white text-sm">${window.aceEscapeHtml_(t.totalDiamonds.toLocaleString())} 💎</span>
     </div>
   `).join('') || '<p class="text-xs text-slate-500">ไม่มีข้อมูล</p>';
 
@@ -450,15 +451,15 @@ function renderLeaderboards(teams, vjs) {
     <div class="flex items-center justify-between p-3 rounded-xl bg-slate-800/80 border border-slate-700">
       <div class="flex items-center gap-3">
         <span class="text-xl">${badges[idx] || (idx + 1)}</span>
-        <img src="${getAvatarUrl(v.avatarUrl, v.name)}" 
-             alt="${v.name}" 
+        <img src="${getAvatarUrl(v.avatarUrl, v.name)}" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(v.name)}&background=4f46e5&color=fff&bold=true'" loading="lazy" decoding="async"
+             alt="${window.aceEscapeHtml_(v.name)}" 
              class="w-10 h-10 rounded-full object-cover border-2 border-emerald-400/50 shadow-md">
         <div>
-          <p class="font-bold text-emerald-300 text-sm">${v.name}</p>
-          <p class="text-[10px] text-slate-400">${v.team}</p>
+          <p class="font-bold text-emerald-300 text-sm">${window.aceEscapeHtml_(v.name)}</p>
+          <p class="text-[10px] text-slate-400">${window.aceEscapeHtml_(v.team)}</p>
         </div>
       </div>
-      <span class="font-extrabold text-white text-sm">${v.diamonds.toLocaleString()} 💎</span>
+      <span class="font-extrabold text-white text-sm">${window.aceEscapeHtml_(v.diamonds.toLocaleString())} 💎</span>
     </div>
   `).join('') || '<p class="text-xs text-slate-500">ไม่มีข้อมูล</p>';
 }
@@ -468,11 +469,11 @@ function renderTables(teams, vjs) {
   const teamTbody = document.getElementById('team-table-body');
   teamTbody.innerHTML = (teams || []).map(t => `
     <tr class="hover:bg-slate-800/50">
-      <td class="p-3 font-bold">${t.rank}</td>
-      <td class="p-3 text-amber-300 font-bold">${t.teamName}</td>
-      <td class="p-3">${t.vjCount} คน</td>
-      <td class="p-3 font-bold text-emerald-400">${t.totalDiamonds.toLocaleString()}</td>
-      <td class="p-3">${t.avgPerVJ.toLocaleString()}</td>
+      <td class="p-3 font-bold">${window.aceEscapeHtml_(t.rank)}</td>
+      <td class="p-3 text-amber-300 font-bold">${window.aceEscapeHtml_(t.teamName)}</td>
+      <td class="p-3">${window.aceEscapeHtml_(t.vjCount)} คน</td>
+      <td class="p-3 font-bold text-emerald-400">${window.aceEscapeHtml_(t.totalDiamonds.toLocaleString())}</td>
+      <td class="p-3">${window.aceEscapeHtml_(t.avgPerVJ.toLocaleString())}</td>
     </tr>
   `).join('');
 
@@ -485,16 +486,16 @@ function renderTables(teams, vjs) {
 
     return `
       <tr class="hover:bg-slate-800/50">
-        <td class="p-3 font-bold">${v.rank}</td>
+        <td class="p-3 font-bold">${window.aceEscapeHtml_(v.rank)}</td>
         <td class="p-3 font-bold text-slate-100 flex items-center gap-2">
-          <img src="${getAvatarUrl(v.avatarUrl, v.name)}" 
-               alt="${v.name}" 
+          <img src="${getAvatarUrl(v.avatarUrl, v.name)}" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(v.name)}&background=4f46e5&color=fff&bold=true'" loading="lazy" decoding="async"
+               alt="${window.aceEscapeHtml_(v.name)}" 
                class="w-7 h-7 rounded-full object-cover border border-slate-600 shrink-0">
-          <span class="truncate">${v.name}</span>
+          <span class="truncate">${window.aceEscapeHtml_(v.name)}</span>
         </td>
-        <td class="p-3 text-slate-400">${v.team}</td>
-        <td class="p-3 font-bold text-emerald-400">${v.diamonds.toLocaleString()}</td>
-        <td class="p-3 text-slate-400">${Math.round(v.dailyTarget).toLocaleString()}</td>
+        <td class="p-3 text-slate-400">${window.aceEscapeHtml_(v.team)}</td>
+        <td class="p-3 font-bold text-emerald-400">${window.aceEscapeHtml_(v.diamonds.toLocaleString())}</td>
+        <td class="p-3 text-slate-400">${window.aceEscapeHtml_(Math.round(v.dailyTarget).toLocaleString())}</td>
         <td class="p-3">
           <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeClass}">
             ${rate.toFixed(1)}%

@@ -40,14 +40,16 @@ function doGet(e) {
     return HtmlService.createTemplateFromFile('weekly_tab')
       .evaluate()
       .setTitle('ACE Tracking - Weekly Dashboard')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
   
   if (page === 'daily_summary') {
     return HtmlService.createTemplateFromFile('daily_summary')
       .evaluate()
       .setTitle('ACE Tracking - Daily Summary Dashboard')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
   if (page === 'vj_bonus' || page === 'vjbonus') {
@@ -85,6 +87,10 @@ function doGet(e) {
     .evaluate()
     .setTitle('ACE Live Tracking Dashboard')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function getACEWebAppUrl() {
+  return ScriptApp.getService().getUrl();
 }
 
 // function doGet(e) {
@@ -151,11 +157,12 @@ function doGet(e) {
 
 // ฟังก์ชันดึงและประมวลผลข้อมูลรายวัน
 function getDailySummaryData(targetSheetName, selectedDay) {
-  return getDailyStatsSummary(targetSheetName, selectedDay);
+  return getDailyStatsSummary(targetSheetName, selectedDay, arguments[2]);
 }
 
 // ระบบแปลภาษาอัตโนมัติผ่าน Google LanguageApp
-function translateText(text, targetLang) {
+function translateText_legacy_1_(text, targetLang) {
+  try { requireAdminSession_(arguments[2]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     if (!text || text.trim() === '') return { success: true, translatedText: '' };
     const target = targetLang === 'zh' ? 'zh-CN' : targetLang;
@@ -167,14 +174,13 @@ function translateText(text, targetLang) {
 }
 
 // ดึงรายชื่อชีตทั้งหมด ยกเว้นชีตระบบ (Optimized)
-function getSheetList() {
+function getSheetList_legacy_1_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheets = ss.getSheets();
-    const excludeList = ['system_logs', 'admin_users', 'status_overrides', 'team data', 'team_data', 'vj mc all', 'kpi_targets', 'kpi_data'];
     const sheetNames = sheets
       .map(s => s.getName())
-      .filter(name => !excludeList.includes(name.toLowerCase().trim()));
+      .filter(isMonthlySheetName_);
     return { success: true, sheetNames: sheetNames };
   } catch (error) {
     return { success: false, error: error.message || error.toString() };
@@ -182,7 +188,7 @@ function getSheetList() {
 }
 
 // ดึงรูปโปรไฟล์ VJ จากชีต vj mc all
-function getVJProfilesMap() {
+function getVJProfilesMap__legacy_1_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('vj mc all') || ss.getSheetByName('VJ MC ALL') || ss.getSheetByName('vj_mc_all');
@@ -211,7 +217,7 @@ function getVJProfilesMap() {
 }
 
 // ดึงเวลาไลฟ์สดของแต่ละทีมจากชีต Team Data
-function getTeamDataSchedules() {
+function getTeamDataSchedules__legacy_1_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Team Data') || ss.getSheetByName('team data') || ss.getSheetByName('Team_Data');
@@ -229,9 +235,7 @@ function getTeamDataSchedules() {
       }
     }
     return schedules;
-  } catch (e) {
-    return {};
-  }
+  } catch (e) { return {}; }
 }
 
 function parseMonthYearFromSheetName(sheetName) {
@@ -272,10 +276,16 @@ function parseMonthYearFromSheetName(sheetName) {
   return { month: foundMonth, year: foundYear };
 }
 
+function isMonthlySheetName_(sheetName) {
+  const name = String(sheetName || '').trim();
+  if (/^20\d{2}[-/](0?[1-9]|1[0-2])$/.test(name)) return true;
+  return !!parseMonthYearFromSheetName(name);
+}
+
 // ----------------------------------------------------
 // ระบบ KPI รายบุคคล (Individual KPI Management)
 // ----------------------------------------------------
-function initKPITargetsSheet_() {
+function initKPITargetsSheetLegacyV1_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('KPI_Targets');
   if (!sheet) {
@@ -287,9 +297,9 @@ function initKPITargetsSheet_() {
   return sheet;
 }
 
-function getKPITargetsMap() {
+function getKPITargetsMapLegacyV1_() {
   try {
-    const sheet = initKPITargetsSheet_();
+    const sheet = initKPITargetsSheetLegacyV1_();
     const data = sheet.getDataRange().getValues();
     const targetsMap = {};
 
@@ -335,7 +345,7 @@ function saveKPITarget(vjName, targetVal, adminUser, sessionToken) {
   }
 }
 
-function getDataFromSheet(targetSheetName) {
+function getDataFromSheetLegacy_(targetSheetName) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
@@ -344,10 +354,11 @@ function getDataFromSheet(targetSheetName) {
 
     const activeSheetName = sheet.getName();
     const data = sheet.getDataRange().getValues();
-    const vjProfilesMap = getVJProfilesMap();
-    const statusOverrides = getStatusOverrides();
-    const teamLiveSchedules = getTeamDataSchedules();
-    const kpiTargetsMap = getKPITargetsMap();
+    const vjProfilesMap = getVJProfilesMap_();
+    const vjProfileDetails = getVJProfileDetailsMap_();
+    const statusOverrides = getStatusOverrides_();
+    const teamLiveSchedules = getTeamDataSchedules_();
+    const kpiTargetsMap = getKPITargetsMap_(activeSheetName);
 
     if (!data || data.length < 2) {
       return {
@@ -503,6 +514,7 @@ function saveTeamDailyScores(targetSheetName, dateDay, selectedTeam, scoreList, 
       }
     });
 
+    if (updatedCount > 0) invalidateACEDataCache_(sheet.getName());
     const loggerName = session.displayName;
     saveLog_('SAVE_DAILY_SCORES', `บันทึกคะแนนทีม ${selectedTeam} วันที่ ${dateDay} (ชีต: ${sheet.getName()}) จำนวน ${updatedCount} รายการ`, loggerName, 'SUCCESS');
     return { success: true, message: 'บันทึกคะแนนเรียบร้อยแล้ว!', updatedCount: updatedCount };
@@ -548,6 +560,7 @@ function saveStatusOverride(type, targetName, statusValue, adminUser, sessionTok
       sheet.appendRow([cleanType, cleanTarget, cleanValue, session.displayName, now]);
     }
 
+    invalidateACEDataCache_();
     saveLog_('UPDATE_STATUS', `ปรับเปลี่ยนสถานะ ${cleanType} ของ "${cleanTarget}" เป็น -> ${cleanValue}`, session.displayName, 'SUCCESS');
     return { success: true, message: 'อัปเดตสถานะเรียบร้อยแล้ว' };
   } catch (e) {
@@ -555,7 +568,7 @@ function saveStatusOverride(type, targetName, statusValue, adminUser, sessionTok
   }
 }
 
-function getStatusOverrides() {
+function getStatusOverrides_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Status_Overrides');
@@ -651,7 +664,8 @@ function getAdminSession_(token) {
   if (!raw) return null;
   try {
     const session = JSON.parse(raw);
-    if (!session || !session.role || !session.username) return null;
+    if (!session || !session.username || !['ADMIN', 'SUPER_ADMIN'].includes(String(session.role || '').toUpperCase())) return null;
+    session.role = String(session.role).toUpperCase();
     return session;
   } catch (error) {
     return null;
@@ -681,6 +695,7 @@ function adminPasscodeMatches_(passcode, storedValue) {
 function requireAdminSession_(token, allowedRoles) {
   const session = getAdminSession_(token);
   if (!session) throw new Error('เซสชันหมดอายุหรือไม่มีสิทธิ์ กรุณาเข้าสู่ระบบใหม่');
+  if (!['ADMIN', 'SUPER_ADMIN'].includes(String(session.role || '').toUpperCase())) throw new Error('บัญชีนี้ไม่มีสิทธิ์ดำเนินการ');
   if (Array.isArray(allowedRoles) && allowedRoles.length && allowedRoles.indexOf(session.role) === -1) {
     throw new Error('บัญชีนี้ไม่มีสิทธิ์ดำเนินการ');
   }
@@ -696,6 +711,51 @@ function logoutAdminSession(token) {
 function validateAdminSession(token) {
   const session = getAdminSession_(token);
   return session ? { success: true, displayName: session.displayName, role: session.role } : { success: false };
+}
+
+// Return only the current authenticated user's display information and matching
+// public TikTok profile. The session token is never returned to the caller.
+function getACECurrentUserProfile(token) {
+  try {
+    const session = requireAdminSession_(token);
+    const cache = CacheService.getScriptCache();
+    const cacheKey = 'ACE_CURRENT_USER_PROFILE_' + String(session.username || '').toLowerCase();
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      try {
+        const cachedProfile = JSON.parse(cached);
+        cachedProfile.role = String(session.role || 'ADMIN');
+        return cachedProfile;
+      } catch (cacheError) {}
+    }
+    const displayName = String(session.displayName || session.username || 'Admin').trim();
+    const candidates = [displayName, session.username].map(normalizeVJNameKey_).filter(Boolean);
+    const profiles = getVJProfileDetailsMap_();
+    let profile = null;
+    for (let i = 0; i < candidates.length; i++) {
+      if (profiles[candidates[i]]) { profile = profiles[candidates[i]]; break; }
+    }
+    if (!profile) {
+      profile = Object.keys(profiles).map(key => profiles[key]).find(item => {
+        const storedTikTokId = String(item.tiktokId || '').replace(/^@/, '').trim();
+        return storedTikTokId && candidates.indexOf(normalizeVJNameKey_(storedTikTokId)) !== -1;
+      }) || null;
+    }
+    const tiktokId = profile ? String(profile.tiktokId || '').replace(/^@/, '').trim() : '';
+    const profilePic = profile && profile.profilePic ? profile.profilePic : '';
+    const result = {
+      success: true,
+      displayName: displayName,
+      username: String(session.username || ''),
+      role: String(session.role || 'ADMIN'),
+      tiktokId: tiktokId,
+      profilePic: profilePic
+    };
+    cache.put(cacheKey, JSON.stringify(result), 300);
+    return result;
+  } catch (error) {
+    return { success: false, error: error.message || String(error) };
+  }
 }
 
 function verifyAdminAccess(passcode, username) {
@@ -905,7 +965,8 @@ function initKPIDataSheet_() {
   return sheet;
 }
 
-function getVJListForIndividualKPI() {
+function getVJListForIndividualKPI(sessionToken) {
+  try { requireAdminSession_(sessionToken); } catch (authError) { return { success: false, error: authError.message, vjs: [] }; }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const preferredNames = ['vj mc all', 'vj_mc_all'];
   const sourceSheet = ss.getSheets().find(function (sheet) {
@@ -939,9 +1000,10 @@ function getVJListForIndividualKPI() {
 }
 
 function getIndividualKPISetupData() {
+  try { requireAdminSession_(arguments[0]); } catch (authError) { return { success: false, error: authError.message, vjs: [] }; }
   try {
     initKPIDataSheet_();
-    return getVJListForIndividualKPI();
+    return getVJListForIndividualKPI(arguments[0]);
   } catch (error) {
     return { success: false, error: error.toString(), vjs: [] };
   }
@@ -960,7 +1022,7 @@ function saveIndividualKPIData(vjName, team, target, actual, notes, adminUser, s
     if (!isFinite(targetNumber) || targetNumber <= 0) throw new Error('เป้าหมาย KPI ต้องมากกว่า 0');
     if (!isFinite(actualNumber) || actualNumber < 0) throw new Error('ยอดทำได้จริงต้องเป็น 0 หรือมากกว่า');
 
-    const vjResult = getVJListForIndividualKPI();
+    const vjResult = getVJListForIndividualKPI(sessionToken);
     const matchedVJ = (vjResult.vjs || []).find(function (vj) { return vj.name.toLowerCase() === cleanName.toLowerCase(); });
     if (!matchedVJ) throw new Error('ไม่พบข้อมูล VJ คนนี้ในระบบ');
 
@@ -989,12 +1051,13 @@ function saveIndividualKPIData(vjName, team, target, actual, notes, adminUser, s
 
 
 // ฟังก์ชันสำหรับกระจาย KPI จากระดับทีมลงสู่ VJ
-function distributeKPI(payload) {
+function distributeKPI(payload, sessionToken) {
   try {
+    const session = requireAdminSession_(sessionToken);
     const { team, totalKPI, mode, manualTargets, adminUser } = payload;
     
     // ดึงรายชื่อ VJ จากระบบเดิมและกรองเฉพาะทีมที่เลือก
-    const vjData = getVJListForIndividualKPI(); 
+    const vjData = getVJListForIndividualKPI(sessionToken); 
     const vjList = (vjData.vjs || []).filter(v => v.team.toLowerCase() === team.toLowerCase());
     
     if (vjList.length === 0) return { success: false, error: 'ไม่พบ VJ ในทีมนี้' };
@@ -1026,13 +1089,15 @@ function distributeKPI(payload) {
  * ===================================================
  */
 function getACETrackingMonthlyStatsSummary(targetSheetName) {
+  try { requireAdminSession_(arguments[1]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
-    const rawData = getDataFromSheet(targetSheetName);
+    const rawData = getDataFromSheet_(targetSheetName);
     if (!rawData.success) return rawData;
 
     const rows = rawData.rows || [];
     const kpiTargets = rawData.kpiTargets || {};
     const statusOverrides = rawData.statusOverrides || {};
+    const vjProfileDetails = rawData.vjProfileDetails || {};
     const month = rawData.month;
     const year = rawData.year;
     const todayDay = rawData.todayDay || new Date().getDate();
@@ -1092,9 +1157,14 @@ function getACETrackingMonthlyStatsSummary(targetSheetName) {
 
       // สรุปข้อมูลราย VJ
       const vjAchievedRate = target > 0 ? (memberDiamondTotal / target) * 100 : 0;
+      const profile = vjProfileDetails[normalizeVJNameKey_(memberName)] || {};
+      const tiktokId = String(profile.tiktokId || '').replace(/^@/, '').trim();
       vjStatsList.push({
         name: memberName,
         team: team,
+        tiktokId: tiktokId,
+        tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
+        avatarUrl: profile.profilePic || '',
         totalDiamonds: memberDiamondTotal,
         target: target,
         achievedRate: vjAchievedRate
@@ -1146,6 +1216,7 @@ function getACETrackingMonthlyStatsSummary(targetSheetName) {
  * ดึงข้อมูลสรุปเปรียบเทียบรายเดือนจากทุก Sheet
  */
 function getMultiMonthComparisonData() {
+  try { requireAdminSession_(arguments[0]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheets = ss.getSheets();
@@ -1155,7 +1226,7 @@ function getMultiMonthComparisonData() {
       const name = sheet.getName();
       // ดึงเฉพาะ Sheet ที่เป็นชื่อเดือน/ปี (เช่น AUGUST 2026, JULY 2026)
       if (name.toUpperCase().includes('202') || name.toUpperCase().includes('203')) {
-        const stats = getACETrackingMonthlyStatsSummary(name);
+        const stats = getACETrackingMonthlyStatsSummary(name, arguments[0]);
         if (stats.success) {
           resultList.push({
             sheetName: name,
@@ -1198,6 +1269,7 @@ function getMonthYearScore(str) {
  * ดึงข้อมูล VJ รายเดือน + อัปเดตทีมปัจจุบัน + บันทึก Remark ย้ายทีม
  */
 function getVJMultiMonthComparison() {
+  try { requireAdminSession_(arguments[0]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheets = ss.getSheets();
@@ -1217,7 +1289,7 @@ function getVJMultiMonthComparison() {
 
     // 2. ดึงข้อมูลแต่ละเดือนตามลำดับเวลา
     monthList.forEach(sheetName => {
-      const stats = getACETrackingMonthlyStatsSummary(sheetName);
+      const stats = getACETrackingMonthlyStatsSummary(sheetName, arguments[0]);
       if (stats.success && stats.vjStatsList) {
         stats.vjStatsList.forEach(vj => {
           let rawName = String(vj.name || '').trim();
@@ -1326,7 +1398,7 @@ function initMCSheets_() {
 /**
  * 2. ฟังก์ชันคำนวณ Bonus MC ประจำทีมรายวัน ตามสูตร Tier Scale
  * - ยอด < 60,000 -> 0 บาท
- * - ยอดเพิ่มขึ้นทุกๆ 60,000 จะได้ Bonus เพิ่มขึ้น 150 บาท
+ * - ทุกๆ 60,000 จะได้ Bonus เพิ่มขึ้น 150 บาท
  */
 function calculateMCBonus(dailyScore) {
   const score = parseFloat(dailyScore) || 0;
@@ -1357,15 +1429,17 @@ function calculateMCBonus(dailyScore) {
  * 3. ดึงรายการตารางงาน MC (Filtering & Search)
  */
 /**
- * ดึงตารางงาน MC โดยอ่านอัตโนมัติจากชีตรายเดือน (ช่องก่อนแถว TOTAL + Team Data)
+ * ดึงตารางงานอัตโนมัติจากชีตรายเดือน (ช่องก่อนแถว TOTAL + Team Data)
  */
 function getMCSchedules(startDateStr, endDateStr, mcFilter, teamFilter, targetSheetName) {
+  try { requireAdminSession_(arguments[5]); } catch (authError) { return { success: false, error: authError.message, schedules: [] }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
+    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : getLatestMonthlySheet_(ss);
+    if (activeSheet && !isMonthlySheetName_(activeSheet.getName())) return { success: false, error: 'อนุญาตให้อ่านเฉพาะแผ่นงานรายเดือน' };
     if (!activeSheet) return { success: true, schedules: [] };
 
-    const teamMCMap = getTeamDefaultMCMap(); // ดึง MC ประจำทีมจาก Team Data
+    const teamMCMap = getTeamDefaultMCMap_(); // ดึง MC ประจำทีมจาก Team Data
     const data = activeSheet.getDataRange().getValues();
     const sheetName = activeSheet.getName();
 
@@ -1524,8 +1598,9 @@ function saveMCSchedule(scheduleData, adminUser, sessionToken) {
  * 5. สรุปคำนวณ Bonus MC รายวันและสะสมประจำเดือน
  */
 function getMCBonusSummary(targetSheetName, selectedDateDay) {
+  try { requireAdminSession_(arguments[2]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
-    const rawData = getDataFromSheet(targetSheetName);
+    const rawData = getDataFromSheet_(targetSheetName);
     if (!rawData.success) return rawData;
 
     const { rows, month, year, todayDay, sheetName } = rawData;
@@ -1684,7 +1759,7 @@ function saveMCBonusLogs(bonusLogsArray, adminUser, sessionToken) {
 /**
  * 1. ดึงข้อมูล MC ประจำทีมจากชีต Team Data (Col A: TEAM, Col F: MC)
  */
-function getTeamDefaultMCMap() {
+function getTeamDefaultMCMap_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const teamSheet = ss.getSheetByName('Team Data');
   const teamMCMap = {};
@@ -1704,7 +1779,7 @@ function getTeamDefaultMCMap() {
 }
 
 /**
- * 2. ฟังก์ชันคำนวณขั้นโบนัส (ทุกๆ 60,000 Diamond = 150 บาท)
+ * 2. คำนวณโบนัส (ทุกๆ 60,000 Diamond = 150 บาท)
  */
 function calculateMCBonus(dailyScore) {
   const score = parseFloat(dailyScore) || 0;
@@ -1735,12 +1810,14 @@ function calculateMCBonus(dailyScore) {
  * 3. อ่านข้อมูลชีตรายเดือน คำนวณ Bonus โดยอิงแถวก่อน TOTAL และยอดทีมในแถว TOTAL
  */
 function getMCBonusSummary(targetSheetName, selectedDateDay) {
+  try { requireAdminSession_(arguments[2]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
+    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : getLatestMonthlySheet_(ss);
+    if (activeSheet && !isMonthlySheetName_(activeSheet.getName())) return { success: false, error: 'อนุญาตให้อ่านเฉพาะแผ่นงานรายเดือน' };
     if (!activeSheet) return { success: false, error: 'ไม่พบแผ่นงานที่ระบุ' };
 
-    const teamMCMap = getTeamDefaultMCMap(); // ดึง MC ประจำทีมจาก Team Data
+    const teamMCMap = getTeamDefaultMCMap_(); // ดึง MC ประจำทีมจาก Team Data
     const data = activeSheet.getDataRange().getValues();
     
     const todayDay = new Date().getDate();
@@ -1876,12 +1953,14 @@ function getTeamShiftMap(sheet) {
  * ดึง ตัวเลือก Dropdown (MC, ทีม, กะเวลา) ส่งให้ Modal บนเว็บ
  */
 function getMCModalDataOptions(targetSheetName) {
+  try { requireAdminSession_(arguments[1]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
+    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : getLatestMonthlySheet_(ss);
+    if (activeSheet && !isMonthlySheetName_(activeSheet.getName())) return { success: false, error: 'อนุญาตให้อ่านเฉพาะแผ่นงานรายเดือน' };
     
     const teamShiftMap = activeSheet ? getTeamShiftMap(activeSheet) : {};
-    const teamMCMap = getTeamDefaultMCMap(); // จาก Team Data
+    const teamMCMap = getTeamDefaultMCMap_(); // จาก Team Data
     
     const teamList = Object.keys(teamShiftMap);
     const mcOptions = [];
@@ -1918,12 +1997,14 @@ function getMCModalDataOptions(targetSheetName) {
  * อัปเดต getMCSchedules ให้ดึงเวลากะงาน SHIFT จากคอลัมน์ B จริง
  */
 function getMCSchedules(startDateStr, endDateStr, mcFilter, teamFilter, targetSheetName) {
+  try { requireAdminSession_(arguments[5]); } catch (authError) { return { success: false, error: authError.message, schedules: [] }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
+    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : getLatestMonthlySheet_(ss);
+    if (activeSheet && !isMonthlySheetName_(activeSheet.getName())) return { success: false, error: 'อนุญาตให้อ่านเฉพาะแผ่นงานรายเดือน' };
     if (!activeSheet) return { success: true, schedules: [] };
 
-    const teamMCMap = getTeamDefaultMCMap();
+    const teamMCMap = getTeamDefaultMCMap_();
     const teamShiftMap = getTeamShiftMap(activeSheet); // ดึง SHIFT จริงรายทีม
     const data = activeSheet.getDataRange().getValues();
     const sheetName = activeSheet.getName();
@@ -2048,6 +2129,7 @@ function saveMCScheduleData(payload, sessionToken) {
     // แถวลงชื่อ MC คือแถวติดเหนือ TOTAL (1-indexed row number = targetRowIndex)
     const mcSheetRow = targetRowIndex; 
     sheet.getRange(mcSheetRow, targetColIdx).setValue(payload.mcName);
+    invalidateACEDataCache_(sheet.getName());
 
     return { 
       success: true, 
@@ -2067,13 +2149,14 @@ function saveMCScheduleData(payload, sessionToken) {
  * @param {string} selectedTeam - ชื่อทีมที่เลือก หรือ 'ALL'
  */
 function getWeeklyStatsSummary(targetSheetName, weekNumber, selectedTeam) {
+  try { requireAdminSession_(arguments[3]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
-    const rawData = getDataFromSheet(targetSheetName);
+    const rawData = getDataFromSheet_(targetSheetName);
     if (!rawData || !rawData.success) {
       return { success: false, error: rawData?.error || 'ไม่สามารถดึงข้อมูลได้' };
     }
 
-    const { rows, statusOverrides, month, year, sheetName } = rawData;
+    const { rows, statusOverrides, month, year, sheetName, vjProfileDetails = {} } = rawData;
     const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
 
     // 1. กำหนดช่วงวันของสัปดาห์ที่ 1-5
@@ -2151,9 +2234,14 @@ function getWeeklyStatsSummary(targetSheetName, weekNumber, selectedTeam) {
           dailyTotalsMap[d] += score;
         }
 
+        const profile = vjProfileDetails[normalizeVJNameKey_(memberName)] || {};
+        const cleanTikTokId = String(profile.tiktokId || '').replace(/^@/, '').trim();
         vjStatsList.push({
           name: memberName,
           team: team,
+          tiktokId: cleanTikTokId,
+          tiktokUrl: cleanTikTokId ? `https://www.tiktok.com/@${encodeURIComponent(cleanTikTokId)}` : '',
+          avatarUrl: profile.profilePic || (cleanTikTokId ? `https://unavatar.io/tiktok/${encodeURIComponent(cleanTikTokId)}` : ''),
           totalDiamonds: memberDiamondTotal,
           dailyAverage: Math.round((memberDiamondTotal / weekDays) * 10) / 10
         });
@@ -2206,8 +2294,9 @@ function getWeeklyStatsSummary(targetSheetName, weekNumber, selectedTeam) {
  * ดึงข้อมูลสรุปแยกตามสัปดาห์ (Weekly Stats Summary)
  */
 function getWeeklyMCBonusSummary(targetSheetName) {
+  try { requireAdminSession_(arguments[1]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
-    const bonusReport = getMCBonusSummary(targetSheetName);
+    const bonusReport = getMCBonusSummary(targetSheetName, undefined, arguments[1]);
     if (!bonusReport.success) return bonusReport;
 
     const weeklyData = {
@@ -2249,14 +2338,14 @@ function getWeeklyMCBonusSummary(targetSheetName) {
  * ===================================================
  */
 function getDailyStatsSummary(targetSheetName, selectedDateDay) {
+  try { requireAdminSession_(arguments[2]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
-    const avatarMap = getVJAvatarMap();
-    const rawData = getDataFromSheet(targetSheetName);
+    const rawData = getDataFromSheet_(targetSheetName);
     if (!rawData || !rawData.success) {
       return { success: false, error: rawData?.error || 'ไม่สามารถดึงข้อมูลได้' };
     }
 
-    const { rows, statusOverrides, month, year, todayDay, sheetName, kpiTargets } = rawData;
+    const { rows, statusOverrides, month, year, todayDay, sheetName, kpiTargets, vjProfileDetails = {} } = rawData;
     const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
     
     // วันที่เลือก (ถ้าไม่ระบุให้ใช้วันปัจจุบัน)
@@ -2291,6 +2380,8 @@ function getDailyStatsSummary(targetSheetName, selectedDateDay) {
       
       const targetMonthly = parseFloat(kpiTargets?.[memberName]) || 0;
       const dailyTarget = targetMonthly > 0 ? targetMonthly / totalDaysInMonth : 0;
+      const profile = vjProfileDetails[normalizeVJNameKey_(memberName)] || {};
+      const cleanTikTokId = String(profile.tiktokId || '').replace(/^@/, '').trim();
 
       totalDailyDiamonds += dailyScore;
 
@@ -2312,6 +2403,9 @@ function getDailyStatsSummary(targetSheetName, selectedDateDay) {
       vjStatsList.push({
         name: memberName,
         team: team,
+        tiktokId: cleanTikTokId,
+        tiktokUrl: cleanTikTokId ? `https://www.tiktok.com/@${encodeURIComponent(cleanTikTokId)}` : '',
+        avatarUrl: profile.profilePic || (cleanTikTokId ? `https://unavatar.io/tiktok/${encodeURIComponent(cleanTikTokId)}` : ''),
         diamonds: dailyScore,
         dailyTarget: dailyTarget,
         achievedRate: dailyTarget > 0 ? (dailyScore / dailyTarget) * 100 : 0
@@ -2361,7 +2455,7 @@ function getDailyStatsSummary(targetSheetName, selectedDateDay) {
 /**
  * ฟังก์ชันดึงรูปโปรไฟล์จากชีต 'vjmc all' แล้วสร้าง Map { "ชื่อ VJ": "URL รูปภาพ" }
  */
-function getVJAvatarMap() {
+function getVJAvatarMap_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   // ค้นหาชีต vjmc all (รองรับตัวพิมพ์เล็ก-ใหญ่)
   const sheet = ss.getSheets().find(s => s.getName().trim().toLowerCase() === 'vjmc all');
@@ -2399,14 +2493,13 @@ function getVJAvatarMap() {
   return avatarMap;
 }
 
-
 /**
  * ดึงรายชื่อชีตประจำเดือน (เพื่อนำไปสร้าง Dropdown)
  */
 /**
  * ดึงรายชื่อชีตประจำเดือน (เพื่อนำไปสร้าง Dropdown)
  */
-function getMonthlySheetNames() {
+function getMonthlySheetNames_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
   const monthlySheets = [];
@@ -2428,6 +2521,7 @@ function getMonthlySheetNames() {
  * @param {string} selectedDateStr - วันที่ที่เลือก (รูปแบบ YYYY-MM-DD)
  */
 function getVJBonusPayload(sheetName, selectedDateStr) {
+  try { requireAdminSession_(arguments[2]); } catch (authError) { return { success: false, error: authError.message }; }
   if (!selectedDateStr) {
     return { success: false, message: "ไม่ได้เลือกวันที่", vjList: [] };
   }
@@ -2631,7 +2725,7 @@ function initMCModuleSheets_() {
 }
 
 /**
- * 2. ฟังก์ชันคำนวณโบนัส MC รายวันตามสเกล Dynamic (+150 บาท ทุกๆ 60,000 Diamond)
+ * 2. ฟังก์ชันคำนวณโบนัส MC รายวันแบบ Dynamic (+150 บาท ทุกๆ 60,000 Diamond)
  */
 function calculateMCBonus(dailyScore) {
   const score = parseFloat(dailyScore) || 0;
@@ -2662,13 +2756,16 @@ function calculateMCBonus(dailyScore) {
  * 3. ดึงข้อมูลตารางงาน MC (getMCSchedules)
  */
 function getMCSchedules(startDateStr, endDateStr, mcFilter, teamFilter, targetSheetName) {
+  try { requireAdminSession_(arguments[5]); } catch (authError) { return { success: false, error: authError.message, schedules: [] }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
+    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : getLatestMonthlySheet_(ss);
+    if (activeSheet && !isMonthlySheetName_(activeSheet.getName())) return { success: false, error: 'อนุญาตให้อ่านเฉพาะแผ่นงานรายเดือน' };
     if (!activeSheet) return { success: true, schedules: [] };
 
-    const teamMCMap = getTeamDefaultMCMap();
+    const teamMCMap = getTeamDefaultMCMap_();
     const teamShiftMap = getTeamShiftMap(activeSheet);
+    const profileDetailsMap = getVJProfileDetailsMap_();
     const data = activeSheet.getDataRange().getValues();
     const sheetName = activeSheet.getName();
 
@@ -2717,6 +2814,8 @@ function getMCSchedules(startDateStr, endDateStr, mcFilter, teamFilter, targetSh
 
           if (dutyMC && dutyMC !== '-') {
             const isCover = defaultMC !== '-' && (dutyMC.toLowerCase() !== defaultMC.toLowerCase());
+            const profile = profileDetailsMap[normalizeVJNameKey_(dutyMC)] || {};
+            const tiktokId = String(profile.tiktokId || '').replace(/^@/, '').trim();
 
             if (cleanMC && !dutyMC.toLowerCase().includes(cleanMC)) continue;
             if (cleanTeam && !currentTeam.toLowerCase().includes(cleanTeam)) continue;
@@ -2725,6 +2824,9 @@ function getMCSchedules(startDateStr, endDateStr, mcFilter, teamFilter, targetSh
               id: `SCH-${currentTeam}-${dateStr}`,
               date: dateStr,
               mcName: dutyMC,
+              tiktokId: tiktokId,
+              tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
+              avatarUrl: profile.profilePic || '',
               assignedTeam: currentTeam,
               effectiveTeam: currentTeam,
               defaultMC: defaultMC,
@@ -2805,12 +2907,15 @@ function saveMCSchedule(payload, adminUser, sessionToken) {
  * 5. ดึงข้อมูลสรุปรายงาน โบนัส MC รายวันและสะสม (getMCBonusReport)
  */
 function getMCBonusReport(targetSheetName, selectedDateDay) {
+  try { requireAdminSession_(arguments[2]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
+    const activeSheet = targetSheetName ? ss.getSheetByName(targetSheetName) : getLatestMonthlySheet_(ss);
+    if (activeSheet && !isMonthlySheetName_(activeSheet.getName())) return { success: false, error: 'อนุญาตให้อ่านเฉพาะแผ่นงานรายเดือน' };
     if (!activeSheet) return { success: false, error: 'ไม่พบแผ่นงานที่ระบุ' };
 
-    const teamMCMap = getTeamDefaultMCMap();
+    const teamMCMap = getTeamDefaultMCMap_();
+    const profileDetailsMap = getVJProfileDetailsMap_();
     const data = activeSheet.getDataRange().getValues();
     
     const todayDay = new Date().getDate();
@@ -2853,8 +2958,13 @@ function getMCBonusReport(targetSheetName, selectedDateDay) {
             const bonusInfo = calculateMCBonus(teamScore);
 
             if (!monthlyMCTotals[dutyMC]) {
+              const profile = profileDetailsMap[normalizeVJNameKey_(dutyMC)] || {};
+              const tiktokId = String(profile.tiktokId || '').replace(/^@/, '').trim();
               monthlyMCTotals[dutyMC] = {
                 mcName: dutyMC,
+                tiktokId: tiktokId,
+                tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
+                avatarUrl: profile.profilePic || '',
                 assignedTeam: currentTeam,
                 activeDaysCount: 0,
                 coverDaysCount: 0,
@@ -2869,9 +2979,14 @@ function getMCBonusReport(targetSheetName, selectedDateDay) {
             monthlyMCTotals[dutyMC].monthlyBonus += bonusInfo.bonusAmount;
 
             if (d === currentDay) {
+              const profile = profileDetailsMap[normalizeVJNameKey_(dutyMC)] || {};
+              const tiktokId = String(profile.tiktokId || '').replace(/^@/, '').trim();
               dailyBreakdown.push({
                 dayNum: d,
                 mcName: dutyMC,
+                tiktokId: tiktokId,
+                tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
+                avatarUrl: profile.profilePic || '',
                 assignedTeam: currentTeam,
                 effectiveTeam: currentTeam,
                 defaultMC: defaultMC,
@@ -2914,6 +3029,7 @@ function getMCBonusReport(targetSheetName, selectedDateDay) {
  * @param {string} targetMonth - รูปแบบ "YYYY-MM" (เช่น "2026-08")
  */
 function getMonthlyMCBonusSummary(targetMonth) {
+  try { requireAdminSession_(arguments[1]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("BonusData"); // เปลี่ยนชื่อ Sheet ตามจริง
     const data = sheet.getDataRange().getValues();
@@ -2957,6 +3073,7 @@ function getMonthlyMCBonusSummary(targetMonth) {
  * ดึงข้อมูลสรุปยอดโบนัสรายเดือน โดยกรองชื่อ MC ที่ซ้ำออก
  */
 function getMonthlyMCBonusFromTeamData(targetMonth) {
+  try { requireAdminSession_(arguments[1]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
@@ -3024,15 +3141,14 @@ function getMonthlyMCBonusFromTeamData(targetMonth) {
 }
 
 
-// ====================================================
-// ระบบจัดการและคำนวณ KPI (VJ & Team Performance % & Rank)
-// ====================================================
-
 /**
- * ดึงข้อมูลสรุป KPI รวม VJ และ Team พร้อมคำนวณ % ความสำเร็จและการจัดอันดับ
+ * ====================================================
+ * ระบบจัดการและคำนวณ KPI (VJ & Team Performance % & Rank)
+ * สรุป KPI รวม VJ และ Team พร้อมคำนวณ % ความสำเร็จและการจัดอันดับ
  */
 // 2. ฟังก์ชันดึงข้อมูล (หากไม่พบชื่อชีต จะทำการสร้างชีตใหม่พร้อมข้อมูลตัวอย่างให้ทันที)
 function getVJAndTeamKPIData(sheetName) {
+  try { requireAdminSession_(arguments[1]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(sheetName);
@@ -3106,7 +3222,7 @@ function getVJAndTeamKPIData(sheetName) {
   }
 }
 
-// 3. ฟังก์ชันสำหรับบันทึกเป้าหมาย KPI ลงชีตที่ระบุ
+// 3. ฟังก์ชันบันทึกเป้าหมาย KPI ลงชีตที่ระบุ
 function saveKPITarget(sheetName, vjName, targetDiamond, adminUser, sessionToken) {
   try {
     const session = requireAdminSession_(sessionToken);
@@ -3152,6 +3268,7 @@ function saveKPITarget(sheetName, vjName, targetDiamond, adminUser, sessionToken
  * ดึงข้อมูล VJ และทีม โดยล็อคตำแหน่งชื่อ VJ ที่ Col B และทีมที่ Col C ในชีต "vj mc all"
  */
 function getVJAndTeamKPIData(sheetName) {
+  try { requireAdminSession_(arguments[1]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
@@ -3169,6 +3286,7 @@ function getVJAndTeamKPIData(sheetName) {
     // ล็อคดัชนีคอลัมน์: Col B คือดัชนี 1 (ชื่อ VJ), Col C คือดัชนี 2 (ทีม)
     const vjIdx = 1; 
     const teamIdx = 2;
+    const profileDetailsMap = getVJProfileDetailsMap_();
     
     let vjMasterList = [];
     for (let i = 1; i < mainData.length; i++) {
@@ -3177,7 +3295,15 @@ function getVJAndTeamKPIData(sheetName) {
       
       // ข้ามแถวที่ไม่มีชื่อ VJ
       if (vjName && vjName !== "") {
-        vjMasterList.push({ vjName: vjName, teamName: teamName });
+        const profile = profileDetailsMap[normalizeVJNameKey_(vjName)] || {};
+        const tiktokId = String(profile.tiktokId || '').replace(/^@/, '').trim();
+        vjMasterList.push({
+          vjName: vjName,
+          teamName: teamName,
+          tiktokId: tiktokId,
+          tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
+          profilePic: profile.profilePic || ''
+        });
       }
     }
     
@@ -3215,6 +3341,9 @@ function getVJAndTeamKPIData(sheetName) {
       return {
         vjName: vj.vjName,
         teamName: vj.teamName,
+        tiktokId: vj.tiktokId,
+        tiktokUrl: vj.tiktokUrl,
+        profilePic: vj.profilePic,
         targetDiamond: monthlyData.target,
         actualDiamond: monthlyData.actual,
         achievementRate: Number(rate.toFixed(1)),
@@ -3309,7 +3438,7 @@ function saveKPITarget(sheetName, vjName, targetValue, adminName, sessionToken) 
       });
       monthSheet.appendRow(newRow);
     }
-    
+    invalidateACEDataCache_(monthSheet.getName());
     return { success: true };
   } catch (error) {
     return { success: false, error: error.toString() };
@@ -3327,14 +3456,13 @@ function saveKPITarget(sheetName, vjName, targetValue, adminName, sessionToken) 
  * ===================================================
  */
 /**
- * ===================================================
  * ฟังก์ชันดึงชีตเดือนล่าสุดอัตโนมัติ (Latest Month Resolver)
  * ===================================================
  */
 /**
  * ดึงชีตประจำเดือนอัจฉริยะ (รองรับการตัดรอบ 04.00 น.)
  */
-function getLatestMonthlySheet(ss) {
+function getLatestMonthlySheet_(ss) {
   const sheets = ss.getSheets();
   const excludeList = [
     'system_logs', 'admin_users', 'status_overrides', 
@@ -3388,7 +3516,7 @@ function getLatestMonthlySheet(ss) {
 /**
  * ดึงข้อมูลรูปโปรไฟล์/โลโก้ประจำทีมจากชีต team_data (คอลัมน์ A = ชื่อทีม, คอลัมน์ B = URL รูปโลโก้)
  */
-function getTeamLogoMap() {
+function getTeamLogoMap_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const teamSheet = ss.getSheetByName('team_data') || ss.getSheetByName('team data');
   const logoMap = {};
@@ -3413,7 +3541,7 @@ function getTeamLogoMap() {
 /**
  * ดึงชีตประจำเดือนอัจฉริยะ (รองรับการตัดรอบ 04.00 น.)
  */
-function getLatestMonthlySheet(ss) {
+function getLatestMonthlySheet_(ss) {
   const sheets = ss.getSheets();
   const excludeList = [
     'system_logs', 'admin_users', 'status_overrides', 
@@ -3463,15 +3591,17 @@ function getTVDashboardData(targetSheetName, selectedDay) {
     let activeSheet = null;
 
     if (targetSheetName) {
-      activeSheet = ss.getSheetByName(targetSheetName);
+      const requested = ss.getSheetByName(String(targetSheetName).trim());
+      if (requested && isMonthlySheetName_(requested.getName())) activeSheet = requested;
+      else if (String(targetSheetName).trim()) return { success: false, error: 'TV อ่านได้เฉพาะแผ่นงานรายเดือน' };
     }
 
     if (!activeSheet) {
-      activeSheet = getLatestMonthlySheet(ss);
+      activeSheet = getLatestMonthlySheet_(ss);
     }
 
     const sheetName = activeSheet.getName();
-    const rawData = getDataFromSheet(sheetName);
+    const rawData = getDataFromSheet_(sheetName);
 
     if (!rawData || !rawData.success) {
       return { success: false, error: rawData ? rawData.error : 'ไม่พบข้อมูลในชีต' };
@@ -3479,8 +3609,9 @@ function getTVDashboardData(targetSheetName, selectedDay) {
 
     const rows = rawData.rows || [];
     const vjProfiles = rawData.vjProfiles || {};
-    const avatarMap = getVJAvatarMap();
-    const teamLogoMap = getTeamLogoMap();
+    const vjProfileDetails = rawData.vjProfileDetails || {};
+    const avatarMap = vjProfiles;
+    const teamLogoMap = getTeamLogoMap_();
     const teamLiveSchedules = rawData.teamLiveSchedules || {};
     const kpiTargets = rawData.kpiTargets || {};
     const statusOverrides = rawData.statusOverrides || {};
@@ -3548,7 +3679,10 @@ function getTVDashboardData(targetSheetName, selectedDay) {
       teamMap[team].monthlyDiamonds += monthlyDiamonds;
       teamMap[team].vjCount += 1;
 
-      let profileImg = avatarMap[memberName] || vjProfiles[memberName] || '';
+      const memberKey = normalizeVJNameKey_(memberName);
+      const profile = vjProfileDetails[memberKey] || {};
+      const tiktokId = String(profile.tiktokId || '').replace(/^@/, '').trim();
+      let profileImg = avatarMap[memberName] || avatarMap[memberKey] || vjProfiles[memberName] || vjProfiles[memberKey] || '';
       if (!profileImg) {
         profileImg = `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=1e1b4b&color=818cf8&bold=true`;
       }
@@ -3569,6 +3703,8 @@ function getTVDashboardData(targetSheetName, selectedDay) {
         teamLogo: teamLogoImg,
         liveTime: liveTime,
         avatar: profileImg,
+        tiktokId: tiktokId,
+        tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
         dailyDiamonds: dailyDiamonds,
         monthlyDiamonds: monthlyDiamonds,
         monthlyTarget: monthlyTarget,
@@ -3622,6 +3758,7 @@ function getTVDashboardData(targetSheetName, selectedDay) {
 // Helper Functions เดิมของระบบ ACE Tracking
 // ----------------------------------------------------
 function translateText(text, targetLang) {
+  try { requireAdminSession_(arguments[2]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     if (!text || text.trim() === '') return { success: true, translatedText: '' };
     const target = targetLang === 'zh' ? 'zh-CN' : targetLang;
@@ -3632,21 +3769,21 @@ function translateText(text, targetLang) {
   }
 }
 
-function getSheetList() {
+function getSheetList(sessionToken) {
   try {
+    requireAdminSession_(sessionToken);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheets = ss.getSheets();
-    const excludeList = ['system_logs', 'admin_users', 'status_overrides', 'team data', 'team_data', 'vj mc all', 'kpi_targets', 'kpi_data'];
     const sheetNames = sheets
       .map(s => s.getName())
-      .filter(name => !excludeList.includes(name.toLowerCase().trim()));
+      .filter(isMonthlySheetName_);
     return { success: true, sheetNames: sheetNames };
   } catch (error) {
     return { success: false, error: error.message || error.toString() };
   }
 }
 
-function getVJProfilesMap() {
+function getVJProfilesMap__legacy_2_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('vj mc all') || ss.getSheetByName('VJ MC ALL') || ss.getSheetByName('vj_mc_all');
@@ -3674,7 +3811,7 @@ function getVJProfilesMap() {
   }
 }
 
-function getTeamDataSchedules() {
+function getTeamDataSchedules_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Team Data') || ss.getSheetByName('team data') || ss.getSheetByName('Team_Data');
@@ -3738,7 +3875,7 @@ function parseMonthYearFromSheetName(sheetName) {
   return { month: foundMonth, year: foundYear };
 }
 
-function initKPITargetsSheet_() {
+function initKPITargetsSheetLegacyV2_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('KPI_Targets');
   if (!sheet) {
@@ -3750,7 +3887,7 @@ function initKPITargetsSheet_() {
   return sheet;
 }
 
-function getKPITargetsMap() {
+function getKPITargetsMapLegacyV2_() {
   try {
     const sheet = initKPITargetsSheet_();
     const data = sheet.getDataRange().getValues();
@@ -3769,28 +3906,48 @@ function getKPITargetsMap() {
   }
 }
 
-function getDataFromSheet(targetSheetName) {
+function getDataFromSheet(targetSheetName, sessionToken) {
+  try {
+    requireAdminSession_(sessionToken);
+    return getDataFromSheet_(targetSheetName);
+  } catch (error) {
+    return { success: false, error: error.message || 'กรุณาเข้าสู่ระบบใหม่ก่อนอ่านข้อมูล' };
+  }
+}
+
+function getDataFromSheet_(targetSheetName) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
-    if (!sheet) sheet = ss.getSheets()[0];
+    const requestedName = String(targetSheetName || '').trim();
+    const sheet = requestedName ? ss.getSheetByName(requestedName) : null;
+    if (!sheet || !isMonthlySheetName_(sheet.getName())) {
+      return { success: false, error: 'อนุญาตให้อ่านเฉพาะแผ่นงานรายเดือน' };
+    }
 
     const activeSheetName = sheet.getName();
+    const cacheKey = getACEDataCacheKey_(ss.getId(), activeSheetName);
+    try {
+      const cached = CacheService.getScriptCache().get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (cacheReadError) {}
+
     const data = sheet.getDataRange().getValues();
-    const vjProfilesMap = getVJProfilesMap();
-    const statusOverrides = getStatusOverrides();
-    const teamLiveSchedules = getTeamDataSchedules();
-    const kpiTargetsMap = getKPITargetsMap(activeSheetName);
+    const vjProfilesMap = getVJProfilesMap_();
+    const vjProfileDetails = getVJProfileDetailsMap_();
+    const statusOverrides = getStatusOverrides_();
+    const teamLiveSchedules = getTeamDataSchedules_();
+    const kpiTargetsMap = getKPITargetsMap_(activeSheetName);
 
     if (!data || data.length < 2) {
-      return {
+      return cacheACEDataResponse_(cacheKey, {
         success: true,
         sheetName: activeSheetName,
         headers: [], rows: [], activeIndices: [], sheetDiamondTotal: 0,
         vjProfiles: vjProfilesMap, statusOverrides: statusOverrides,
+        vjProfileDetails: vjProfileDetails,
         teamLiveSchedules: teamLiveSchedules, kpiTargets: kpiTargetsMap,
         month: new Date().getMonth(), year: new Date().getFullYear(), todayDay: new Date().getDate()
-      };
+      });
     }
 
     const { month, year } = parseMonthYearFromSheetName(activeSheetName);
@@ -3811,6 +3968,21 @@ function getDataFromSheet(targetSheetName) {
     let currentTeam = 'ไม่ระบุทีม';
 
     rawRows.forEach((row) => {
+      const rowString = row.join(' ').toLowerCase();
+      if (rowString.includes('diamond total') || rowString.includes('钻石总数')) {
+        const colFValue = String(row[5] || '').replace(/,/g, '').trim();
+        let totalValue = parseFloat(colFValue);
+        if (isNaN(totalValue)) {
+          const foundValue = row.find(cell => {
+            const number = parseFloat(String(cell).replace(/,/g, ''));
+            return !isNaN(number) && number > 1000;
+          });
+          totalValue = parseFloat(String(foundValue === undefined ? '' : foundValue).replace(/,/g, ''));
+        }
+        if (!isNaN(totalValue)) extractedDiamondTotal = totalValue;
+        return;
+      }
+
       const colA = String(row[0] || '').trim();
       if (colA !== '' && !colA.toLowerCase().includes('total')) {
         currentTeam = colA;
@@ -3832,26 +4004,65 @@ function getDataFromSheet(targetSheetName) {
       }
     });
 
-    return {
+    return cacheACEDataResponse_(cacheKey, {
       success: true,
       sheetName: activeSheetName,
       headers: rawHeaders,
       rows: memberRows,
       sheetDiamondTotal: extractedDiamondTotal,
       vjProfiles: vjProfilesMap,
+      vjProfileDetails: vjProfileDetails,
       statusOverrides: statusOverrides,
       teamLiveSchedules: teamLiveSchedules,
       kpiTargets: kpiTargetsMap,
       month: month,
       year: year,
       todayDay: new Date().getDate()
-    };
+    });
   } catch (error) {
     return { success: false, error: error.message || error.toString() };
   }
 }
 
-function getStatusOverrides() {
+function getACEDataCacheKey_(spreadsheetId, sheetName) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(spreadsheetId || '') + '|' + String(sheetName || '')
+  );
+  return 'ACE_MONTH_DATA_V5_' + Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '');
+}
+
+function cacheACEDataResponse_(cacheKey, response) {
+  if (!response || !response.success) return response;
+  try {
+    const serialized = JSON.stringify(response);
+    const serializedBytes = Utilities.newBlob(serialized, 'application/json').getBytes().length;
+    if (serializedBytes <= 90000) {
+      CacheService.getScriptCache().put(cacheKey, serialized, 60);
+    }
+  } catch (cacheWriteError) {
+    // Large or non-cacheable responses still return normally.
+  }
+  return response;
+}
+
+function invalidateACEDataCache_(sheetName) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const cache = CacheService.getScriptCache();
+    if (sheetName) {
+      cache.remove(getACEDataCacheKey_(ss.getId(), sheetName));
+      return;
+    }
+    const keys = ss.getSheets()
+      .map(sheet => sheet.getName())
+      .filter(isMonthlySheetName_)
+      .map(name => getACEDataCacheKey_(ss.getId(), name));
+    if (keys.length) cache.removeAll(keys);
+  } catch (cacheError) {}
+}
+
+function getStatusOverrides_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Status_Overrides');
@@ -3875,7 +4086,7 @@ function getStatusOverrides() {
   }
 }
 
-function getVJAvatarMap() {
+function getVJAvatarMap_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheets().find(s => s.getName().trim().toLowerCase() === 'vjmc all' || s.getName().trim().toLowerCase() === 'vj mc all');
   const avatarMap = {};
@@ -3905,17 +4116,17 @@ function getVJAvatarMap() {
   return avatarMap;
 }
 
-function getMonthlySheetNames() {
+function getMonthlySheetNames_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
   const monthlySheets = [];
   sheets.forEach(sheet => {
     const name = sheet.getName();
-    if (/^\d{4}-\d{2}$/.test(name) || name.toLowerCase().includes('202') || name.toLowerCase().includes('203')) {
+    if (isMonthlySheetName_(name)) {
       monthlySheets.push(name);
     }
   });
-  return monthlySheets.length > 0 ? monthlySheets : [ss.getActiveSheet().getName()];
+  return monthlySheets;
 }
 
 function calculateMCBonus(dailyScore) {
@@ -4077,19 +4288,47 @@ function doPost(e) {
 /**
  * ดึงข้อมูล Dashboard KPI ทั้งระดับทีมและ VJ รายบุคคล
  */
-function getKPIDashboardData(targetSheetName) {
+function getKPIDashboardData(targetSheetName, sessionToken) {
+  try {
+    requireAdminSession_(sessionToken);
+    return getKPIDashboardData_(targetSheetName);
+  } catch (error) {
+    return { success: false, error: error.message || 'กรุณาเข้าสู่ระบบใหม่ก่อนอ่านข้อมูล KPI' };
+  }
+}
+
+function getKPIDashboardData_(targetSheetName) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet = targetSheetName ? ss.getSheetByName(targetSheetName) : ss.getSheets()[0];
-    if (!sheet) sheet = ss.getSheets()[0];
+    const requestedName = String(targetSheetName || '').trim();
+    const sheet = requestedName
+      ? ss.getSheetByName(requestedName)
+      : ss.getSheets().find(candidate => isMonthlySheetName_(candidate.getName()));
+    if (!sheet || !isMonthlySheetName_(sheet.getName())) {
+      return { success: false, error: 'ไม่พบชีตเดือนที่เลือก กรุณาเลือกแผ่นงานรายเดือน' };
+    }
 
     const activeSheetName = sheet.getName();
+    const cacheKey = getACEKPIDashboardCacheKey_(ss.getId(), activeSheetName);
+    try {
+      const cached = CacheService.getScriptCache().get(cacheKey);
+      if (cached) return JSON.parse(cached);
+    } catch (cacheReadError) {}
+
     const rawData = sheet.getDataRange().getValues();
-    const profilesMap = getVJProfilesMap();
-    const kpiTargetsMap = getKPITargetsMap(activeSheetName);
+    const profilesMap = getVJProfilesMap_();
+    const profileDetailsMap = getVJProfileDetailsMap_();
+    const kpiTargetsMap = getKPITargetsMap_(activeSheetName);
 
     if (!rawData || rawData.length < 2) {
-      return { success: true, sheetName: activeSheetName, teamSummary: {}, vjList: [], monthList: getMonthlySheets() };
+      return cacheACEKPIDashboardResponse_(cacheKey, {
+        success: true,
+        sheetName: activeSheetName,
+        monthList: getMonthlySheets_(),
+        executiveSummary: { totalTarget: 0, totalCurrent: 0, progressPct: 0, remainingDeficit: 0, totalVJs: 0 },
+        vjList: [],
+        lastUpdated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')
+      });
     }
 
     let startRowIndex = 1;
@@ -4123,16 +4362,22 @@ function getKPIDashboardData(targetSheetName) {
           monthlyCurrent += score;
         }
 
-        const vjTarget = parseFloat(kpiTargetsMap[memberName]) || 0;
+        const vjTarget = parseFloat(kpiTargetsMap[memberName] !== undefined
+          ? kpiTargetsMap[memberName]
+          : kpiTargetsMap[normalizeVJNameKey_(memberName)]) || 0;
         const progressPct = vjTarget > 0 ? (monthlyCurrent / vjTarget) * 100 : 0;
         const remainingDeficit = Math.max(0, vjTarget - monthlyCurrent);
-        const avatarUrl = profilesMap[memberName] || `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=6366f1&color=fff`;
+        const avatarUrl = profilesMap[memberName] || profilesMap[normalizeVJNameKey_(memberName)] || `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=6366f1&color=fff`;
+        const profileDetails = profileDetailsMap[normalizeVJNameKey_(memberName)] || {};
+        const tiktokId = String(profileDetails.tiktokId || '').replace(/^@/, '').trim();
 
         vjList.push({
           vjId: String(row[3] || memberName).trim(),
           name: memberName,
           team: currentTeam,
           avatar: avatarUrl,
+          tiktokId: tiktokId,
+          tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
           target: vjTarget,
           current: monthlyCurrent,
           progress: Math.min(100, Math.round(progressPct * 10) / 10),
@@ -4149,10 +4394,10 @@ function getKPIDashboardData(targetSheetName) {
     const teamProgress = totalTeamTarget > 0 ? (totalTeamCurrent / totalTeamTarget) * 100 : 0;
     const teamRemaining = Math.max(0, totalTeamTarget - totalTeamCurrent);
 
-    return {
+    return cacheACEKPIDashboardResponse_(cacheKey, {
       success: true,
       sheetName: activeSheetName,
-      monthList: getMonthlySheets(),
+      monthList: getMonthlySheets_(),
       executiveSummary: {
         totalTarget: totalTeamTarget,
         totalCurrent: totalTeamCurrent,
@@ -4162,10 +4407,41 @@ function getKPIDashboardData(targetSheetName) {
       },
       vjList: vjList,
       lastUpdated: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss')
-    };
+    });
   } catch (error) {
-    return { success: false, error: error.toString() };
+    console.error('getKPIDashboardData failed: ' + (error && error.stack ? error.stack : error));
+    return { success: false, error: 'ไม่สามารถโหลดข้อมูล KPI ได้ กรุณาลองใหม่อีกครั้ง' };
   }
+}
+
+function getACEKPIDashboardCacheKey_(spreadsheetId, sheetName) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(spreadsheetId || '') + '|KPI|' + String(sheetName || '')
+  );
+    return 'ACE_KPI_DASH_V2_' + Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '');
+}
+
+function cacheACEKPIDashboardResponse_(cacheKey, response) {
+  if (!response || !response.success) return response;
+  try {
+    const serialized = JSON.stringify(response);
+    if (Utilities.newBlob(serialized, 'application/json').getBytes().length <= 90000) {
+      CacheService.getScriptCache().put(cacheKey, serialized, 60);
+    }
+  } catch (cacheWriteError) {}
+  return response;
+}
+
+function invalidateACEKPIDashboardCache_(sheetName) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const names = sheetName ? [String(sheetName)] : getMonthlySheets_();
+    const keys = names
+      .filter(name => isMonthlySheetName_(name))
+      .map(name => getACEKPIDashboardCacheKey_(ss.getId(), name));
+    if (keys.length) CacheService.getScriptCache().removeAll(keys);
+  } catch (cacheError) {}
 }
 
 /**
@@ -4184,14 +4460,16 @@ function saveKPISettings(payload, sessionToken) {
       normalizedPayload.vjTargets = Object.keys(targetMap).map(name => ({ name: name, target: targetMap[name] }));
     } else if (payload.action === 'preloadVJList') {
       if (!Array.isArray(payload.vjList)) return { success: false, error: 'รายการ VJ ไม่ถูกต้อง' };
-      const targetSheetForCheck = initKPITargetsSheet_();
-      const existingRows = targetSheetForCheck.getDataRange().getValues();
-      const existing = new Set(existingRows.slice(1).filter(row => !row[4] || String(row[4]).trim() === String(payload.sheetName || '').trim()).map(row => String(row[0] || '').trim().toLowerCase()));
+      const existingRows = getKPITargetRows_(true);
+      const requestedMonth = normalizeKpiMonthKey_(payload.sheetName);
+      const existing = new Set(existingRows.slice(1)
+        .filter(row => !normalizeKpiMonthKey_(row[4]) || normalizeKpiMonthKey_(row[4]) === requestedMonth)
+        .map(row => normalizeVJNameKey_(row[0])));
       const defaultTarget = Number(payload.defaultTarget);
       if (!Number.isFinite(defaultTarget) || defaultTarget < 0) return { success: false, error: 'ค่าเป้าหมายเริ่มต้นไม่ถูกต้อง' };
       normalizedPayload.mode = 'Manual';
       normalizedPayload.vjTargets = [...new Set(payload.vjList.map(name => String(name || '').trim()).filter(Boolean))]
-        .filter(name => !existing.has(name.toLowerCase()))
+        .filter(name => !existing.has(normalizeVJNameKey_(name)))
         .map(name => ({ name: name, target: defaultTarget }));
     }
 
@@ -4211,7 +4489,7 @@ function saveKPISettings(payload, sessionToken) {
     if (mode === 'Auto') {
       const requestedTarget = Number(teamTarget);
       if (!Number.isFinite(requestedTarget) || requestedTarget < 0) return { success: false, error: 'เป้าหมายทีมไม่ถูกต้อง' };
-      const dashboardData = getKPIDashboardData(sheetName);
+      const dashboardData = getKPIDashboardData_(sheetName);
       const teamVJs = dashboardData.vjList.filter(v => v.team === teamName || teamName === 'ALL');
       if (teamVJs.length === 0) return { success: false, error: 'ไม่พบรายชื่อ VJ ในทีมที่ระบุ' };
 
@@ -4236,11 +4514,11 @@ function saveKPISettings(payload, sessionToken) {
     updates.forEach(u => {
       let foundIndex = -1;
       for (let i = 1; i < data.length; i++) {
-        const rowVJName = String(data[i][0] || '').trim().toLowerCase();
-        const rowMonth = String(data[i][4] || '').trim();
+        const rowVJName = normalizeVJNameKey_(data[i][0]);
+        const rowMonth = normalizeKpiMonthKey_(data[i][4]);
         
         // ค้นหารายชื่อ VJ และเดือนที่ตรงกัน
-        if (rowVJName === u.name.toLowerCase() && rowMonth === (sheetName || '')) {
+        if (rowVJName === normalizeVJNameKey_(u.name) && rowMonth === normalizeKpiMonthKey_(sheetName)) {
           foundIndex = i + 1; // บรรทัดใน Sheet (Index 1-based)
           break;
         }
@@ -4271,6 +4549,9 @@ function saveKPISettings(payload, sessionToken) {
       }
     }
 
+    invalidateKPITargetRowsCache_();
+    invalidateACEDataCache_();
+    invalidateACEKPIDashboardCache_(sheetName);
     return { 
       success: true, 
       message: 'บันทึกเป้าหมาย KPI ลงใน Google Sheets เรียบร้อยแล้ว', 
@@ -4300,12 +4581,20 @@ function normalizeKpiMonthKey_(value) {
   return String(value || '').trim().replace(/\s+/g, ' ').toUpperCase();
 }
 
-function getKPITargetsMap(sheetName) {
+function getKPITargetsMapForAdmin(sheetName, sessionToken) {
   try {
-    const sheet = initKPITargetsSheet_();
-    const data = sheet.getDataRange().getValues();
-    const defaultTargets = {};
-    const monthTargets = {};
+    requireAdminSession_(sessionToken);
+    return getKPITargetsMap_(sheetName);
+  } catch (error) {
+    return { success: false, error: error.message || 'กรุณาเข้าสู่ระบบใหม่ก่อนอ่านข้อมูล KPI' };
+  }
+}
+
+function getKPITargetsMap_(sheetName) {
+  try {
+    const data = getKPITargetRows_();
+    const defaultTargets = Object.create(null);
+    const monthTargets = Object.create(null);
     const targetMonth = normalizeKpiMonthKey_(sheetName);
 
     for (let i = 1; i < data.length; i++) {
@@ -4314,49 +4603,153 @@ function getKPITargetsMap(sheetName) {
       const monthRef = normalizeKpiMonthKey_(data[i][4]);
 
       if (vjName && !isNaN(targetVal)) {
-        if (monthRef && targetMonth && monthRef === targetMonth) monthTargets[vjName] = targetVal;
-        else if (!monthRef) defaultTargets[vjName] = targetVal;
+        const key = normalizeVJNameKey_(vjName);
+        if (monthRef && targetMonth && monthRef === targetMonth) {
+          monthTargets[key] = targetVal;
+          monthTargets[vjName] = targetVal;
+        } else if (!monthRef) {
+          defaultTargets[key] = targetVal;
+          defaultTargets[vjName] = targetVal;
+        }
       }
     }
-    return Object.assign(defaultTargets, monthTargets);
+    return Object.assign({}, defaultTargets, monthTargets);
   } catch (e) {
     return {};
   }
 }
 
-function getVJProfilesMap() {
+function getKPITargetRows_(forceRefresh) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'ACE_KPI_TARGET_ROWS_V1_' + ss.getId();
+  if (!forceRefresh) {
+    try {
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        const cachedRows = JSON.parse(cached);
+        if (Array.isArray(cachedRows)) return cachedRows;
+      }
+    } catch (cacheReadError) {}
+  }
+
+  const sheet = ss.getSheetByName('KPI_Targets') || ss.getSheetByName('kpi_targets');
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const lastRow = sheet.getLastRow();
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn())
+    .getDisplayValues()[0]
+    .map(value => String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ''));
+  const nameColumn = headers.findIndex(value => value.includes('vj') || value.includes('name') || value.includes('ชื่อ'));
+  const targetColumn = headers.findIndex(value => value.includes('target') && (value.includes('diamond') || value === 'target'));
+  const monthColumn = headers.findIndex(value => value === 'month' || value === 'monthsheet' || value === 'targetmonth');
+  if (nameColumn < 0 || targetColumn < 0) return [];
+  const readColumns = Math.max(nameColumn, targetColumn, monthColumn, 0) + 1;
+  const values = sheet.getRange(2, 1, lastRow - 1, readColumns).getValues();
+  const rows = [['VJ_Name', 'Target_Diamond', 'UpdatedBy', 'UpdatedAt', 'Month_Sheet']];
+  values.forEach(row => {
+    const monthCell = monthColumn >= 0 ? row[monthColumn] : '';
+    const month = monthCell instanceof Date && !isNaN(monthCell.getTime())
+      ? Utilities.formatDate(monthCell, Session.getScriptTimeZone(), 'MMMM yyyy').toUpperCase()
+      : String(monthCell || '').trim();
+    rows.push([String(row[nameColumn] || '').trim(), row[targetColumn], '', '', month]);
+  });
+  try {
+    const serialized = JSON.stringify(rows);
+    if (Utilities.newBlob(serialized, 'application/json').getBytes().length <= 90000) cache.put(cacheKey, serialized, 60);
+  } catch (cacheWriteError) {}
+  return rows;
+}
+
+function invalidateKPITargetRowsCache_() {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('vj mc all') || ss.getSheetByName('VJ MC ALL') || ss.getSheetByName('VJ_Profiles');
-    if (!sheet) return {};
+    CacheService.getScriptCache().remove('ACE_KPI_TARGET_ROWS_V1_' + ss.getId());
+  } catch (cacheError) {}
+}
 
-    const data = sheet.getDataRange().getValues();
+function getVJProfilesMap_() {
+  try {
     const profiles = {};
-
-    for (let i = 1; i < data.length; i++) {
-      const vjName = String(data[i][1] || data[i][0] || '').trim();
-      const avatarVal = String(data[i][7] || data[i][2] || '').trim();
-
-      if (vjName && avatarVal) {
-        let imgUrl = avatarVal;
-        if (!imgUrl.startsWith('http')) {
-          const cleanId = avatarVal.replace('@', '').trim();
-          imgUrl = `https://unavatar.io/tiktok/${cleanId}`;
-        }
-        profiles[vjName] = imgUrl;
-      }
-    }
+    const details = getVJProfileDetailsMap_();
+    Object.keys(details).forEach(key => {
+      profiles[key] = details[key].profilePic;
+      profiles[details[key].name] = details[key].profilePic;
+    });
     return profiles;
   } catch (e) {
     return {};
   }
 }
 
-function getMonthlySheets() {
+// Read profile metadata once from the source VJ sheet. Supports named columns and
+// the verified legacy layout (VJ name in B, TikTok ID in H).
+function normalizeVJNameKey_(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function getVJProfileDetailsMap_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const cache = CacheService.getScriptCache();
+  // VJ MC ALL column H is the single source of TikTok IDs used across pages.
+  const cacheKey = 'ACE_VJ_PROFILE_DETAILS_V4_' + ss.getId();
+  try {
+    const cached = cache.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (cacheReadError) {}
+  const sheet = ss.getSheets().find(s => ['vj mc all', 'vj_mc_all', 'vjmc all'].includes(s.getName().trim().toLowerCase()));
+  const result = {};
+  if (!sheet) return result;
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return result;
+  // Read only A:H; B is the name and H is the TikTok ID in the confirmed sheet layout.
+  const data = sheet.getRange(1, 1, lastRow, 8).getValues();
+  const nameIdx = 1;
+  const idIdx = 7;
+  for (let i = 1; i < data.length; i++) {
+    const name = String(data[i][nameIdx] || data[i][1] || '').trim();
+    if (!name) continue;
+    const idValue = String(data[i][idIdx] || '').trim();
+    // Accept either a plain @username or a TikTok profile URL in the ID column.
+    const idFromUrl = idValue.match(/tiktok\.com\/@([^/?#]+)/i);
+    const tiktokId = idFromUrl ? idFromUrl[1] : (idValue && !/^https?:\/\//i.test(idValue) ? idValue : '');
+    const cleanId = String(tiktokId || '').replace(/^@/, '').trim();
+    const profilePic = cleanId
+      ? `https://unavatar.io/tiktok/${encodeURIComponent(cleanId)}`
+      : '';
+    const profile = { name, tiktokId: cleanId, profilePic };
+    result[normalizeVJNameKey_(name)] = profile;
+  }
+  try {
+    const serialized = JSON.stringify(result);
+    if (Utilities.newBlob(serialized, 'application/json').getBytes().length <= 90000) cache.put(cacheKey, serialized, 300);
+  } catch (cacheWriteError) {}
+  return result;
+}
+
+/** Return TikTok identity and profile image data used across authenticated app pages. */
+function getACEVJIdentityMap(sessionToken) {
+  try {
+    requireAdminSession_(sessionToken);
+    const details = getVJProfileDetailsMap_();
+    const profiles = Object.keys(details).map(key => ({
+      name: details[key].name,
+      tiktokId: String(details[key].tiktokId || '').replace(/^@/, '').trim(),
+      profilePic: details[key].profilePic || '',
+      tiktokUrl: details[key].tiktokId
+        ? `https://www.tiktok.com/@${encodeURIComponent(String(details[key].tiktokId).replace(/^@/, '').trim())}`
+        : ''
+    })).filter(profile => profile.name && profile.tiktokId);
+    return { success: true, profiles: profiles };
+  } catch (error) {
+    return { success: false, error: error && error.message ? error.message : 'ไม่สามารถอ่าน TikTok ID ของ VJ ได้' };
+  }
+}
+
+function getMonthlySheets_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   return ss.getSheets()
     .map(s => s.getName())
-    .filter(name => name.toUpperCase().includes('202') || name.toUpperCase().includes('203') || name.match(/^(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i));
+    .filter(isMonthlySheetName_);
 }
 
 
@@ -4407,53 +4800,16 @@ function calculateVJBountyTier(diamonds) {
  * 2. ฟังก์ชันดึงรูปโปรไฟล์ VJ จากชีต 'vj mc all'
  * หากไม่มีรูปในระบบ จะสร้าง Fallback UI Avatar ให้อัตโนมัติ
  */
-function getVJAvatarMap() {
+function getVJAvatarMap_() {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheets().find(s => ['vj mc all', 'vj_mc_all', 'vjmc all'].includes(s.getName().trim().toLowerCase()));
     const avatarMap = {};
-    if (!sheet) return avatarMap;
-
-    const data = sheet.getDataRange().getValues();
-    if (data.length < 2) return avatarMap;
-
-    const headers = data[0].map(h => String(h).trim().toLowerCase());
-    
-    // ค้นหาคอลัมน์ชื่อ VJ
-    let nameColIdx = headers.findIndex(h => h.includes('vj') || h.includes('name') || h.includes('ชื่อ'));
-    if (nameColIdx === -1) nameColIdx = 1;
-
-    // ค้นหาคอลัมน์รูปภาพ/TikTok
-    let imgColIdx = headers.findIndex(h => 
-      h.includes('tiktok') || h.includes('pic') || h.includes('photo') || 
-      h.includes('image') || h.includes('รูป') || h.includes('url') || 
-      h.includes('avatar') || h.includes('profile')
-    );
-    if (imgColIdx === -1) imgColIdx = 7;
-
-    for (let i = 1; i < data.length; i++) {
-      const vjName = String(data[i][nameColIdx] || '').trim();
-      const rawVal = String(data[i][imgColIdx] || '').trim();
-
-      if (vjName) {
-        let imgUrl = '';
-        if (rawVal) {
-          if (rawVal.startsWith('http://') || rawVal.startsWith('https://')) {
-            imgUrl = rawVal;
-          } else {
-            const cleanId = rawVal.replace('@', '').trim();
-            imgUrl = `https://unavatar.io/tiktok/${cleanId}`;
-          }
-        }
-        
-        // ถ้าไม่มี URL รูป ให้สร้าง Fallback UI Avatar
-        if (!imgUrl) {
-          imgUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(vjName)}&background=6366f1&color=ffffff&bold=true&size=128`;
-        }
-        
-        avatarMap[vjName] = imgUrl;
-      }
-    }
+    const details = getVJProfileDetailsMap_();
+    Object.keys(details).forEach(key => {
+      const profile = details[key];
+      const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name || 'VJ')}&background=6366f1&color=ffffff&bold=true&size=128`;
+      avatarMap[key] = profile.profilePic || fallback;
+      avatarMap[profile.name] = profile.profilePic || fallback;
+    });
     return avatarMap;
   } catch (e) {
     return {};
@@ -4466,9 +4822,12 @@ function getVJAvatarMap() {
  * @param {string} selectedDateStr - วันที่เลือก (รูปแบบ YYYY-MM-DD หรือตัวเลขวันที่ 1-31)
  */
 function getVJBonusPayload(sheetName, selectedDateStr) {
+  try { requireAdminSession_(arguments[2]); } catch (authError) { return { success: false, error: authError.message }; }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const activeSheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
+    const requestedSheet = String(sheetName || '').trim();
+    const activeSheet = requestedSheet ? ss.getSheetByName(requestedSheet) : null;
+    if (activeSheet && !isMonthlySheetName_(activeSheet.getName())) return { success: false, error: 'อนุญาตให้อ่านเฉพาะแผ่นงานรายเดือน' };
     
     if (!activeSheet) {
       return { success: false, error: 'ไม่พบแผ่นงานชื่อ: ' + sheetName };
@@ -4490,7 +4849,8 @@ function getVJBonusPayload(sheetName, selectedDateStr) {
       }
     }
 
-    const avatarMap = getVJAvatarMap();
+    const avatarMap = getVJAvatarMap_();
+    const profileDetailsMap = getVJProfileDetailsMap_();
     const nonVJKeywords = ['trainee', 'mc', 'hr', 'resigned', 'staff', 'ลาออก', 'ผู้ดูแล', 'total', 'รวม'];
 
     // ค้นหา Map คอลัมน์วันที่ (1..31)
@@ -4578,13 +4938,17 @@ function getVJBonusPayload(sheetName, selectedDateStr) {
       totalMonthlyBonusAllVJ += monthlyBonusTotal;
 
       // ดึงรูปอวตาร (พร้อม Fallback UI Avatar)
-      const vjAvatar = avatarMap[vjName] || `https://ui-avatars.com/api/?name=${encodeURIComponent(vjName)}&background=6366f1&color=ffffff&bold=true&size=128`;
+      const profileDetails = profileDetailsMap[normalizeVJNameKey_(vjName)] || {};
+      const tiktokId = String(profileDetails.tiktokId || '').replace(/^@/, '').trim();
+      const vjAvatar = profileDetails.profilePic || avatarMap[vjName] || `https://ui-avatars.com/api/?name=${encodeURIComponent(vjName)}&background=6366f1&color=ffffff&bold=true&size=128`;
 
       // บันทึกข้อมูลสรุปรายเดือน
       monthlyVJSummaryList.push({
         name: vjName,
         team: currentTeam,
         avatar: vjAvatar,
+        tiktokId: tiktokId,
+        tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
         monthlyDiamonds: monthlyDiamondTotal,
         qualifyingDays: monthlyQualifyingDays,
         monthlyBonus: monthlyBonusTotal
@@ -4610,6 +4974,8 @@ function getVJBonusPayload(sheetName, selectedDateStr) {
             name: vjName,
             team: currentTeam,
             avatar: vjAvatar,
+            tiktokId: tiktokId,
+            tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
             dailyDiamonds: dailyDiamonds,
             tierLevel: dailyBonusInfo.tierLevel,
             tierText: dailyBonusInfo.tierText,
@@ -4653,6 +5019,7 @@ function getVJBonusPayload(sheetName, selectedDateStr) {
 }
 
 function getSheetData() {
+  try { requireAdminSession_(arguments[0]); } catch (authError) { return { success: false, error: authError.message }; }
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('vj mc all');
   
@@ -4666,24 +5033,26 @@ function getSheetData() {
   const headers = values[0];
   
   // หาตำแหน่ง Index ของคอลัมน์ที่เกี่ยวข้อง
-  const tiktokIdx = headers.findIndex(h => h.toString().trim().toUpperCase() === 'ID TIKTOK');
+  // VJ MC ALL stores the TikTok ID in the user-confirmed column H.
+  const tiktokIdx = 7;
   const imgIdx = headers.findIndex(h => {
     const str = h.toString().trim().toLowerCase();
     return str.includes('รูป') || str.includes('profile') || str.includes('avatar') || str.includes('image');
   });
 
   const data = values.slice(1).map(row => {
-    const tiktokId = tiktokIdx !== -1 ? row[tiktokIdx] : '';
+    const tiktokValue = tiktokIdx < row.length ? String(row[tiktokIdx] || '').trim() : '';
+    const tiktokMatch = tiktokValue.match(/tiktok\.com\/@([^/?#]+)/i);
+    const tiktokId = tiktokMatch ? tiktokMatch[1] : (tiktokValue.replace(/^@/, '').trim());
     let profilePic = imgIdx !== -1 ? row[imgIdx] : '';
     
     // หากไม่มี URL รูปภาพ ให้สร้างรูปโปรไฟล์ตัวแทนจาก ID TIKTOK
-    if (!profilePic && tiktokId) {
-      profilePic = `https://ui-avatars.com/api/?name=${encodeURIComponent(tiktokId)}&background=0D8ABC&color=fff&size=128`;
-    }
+    if (tiktokId) profilePic = `https://unavatar.io/tiktok/${encodeURIComponent(tiktokId)}`;
 
     return {
       headersData: row,
       tiktokId: tiktokId,
+      tiktokUrl: tiktokId ? `https://www.tiktok.com/@${encodeURIComponent(tiktokId)}` : '',
       profilePic: profilePic
     };
   });
@@ -4731,18 +5100,9 @@ function fetchTikTokProfilesLegacy_() {
   }
 
   var headers = data[0];
-  var tiktokColIndex = headers.findIndex(function(h) {
-    return String(h).trim().toUpperCase() === 'ID TIKTOK';
-  });
-  
-  if (tiktokColIndex === -1) {
-    tiktokColIndex = headers.findIndex(function(h) {
-      return String(h).toLowerCase().includes('tiktok');
-    });
-  }
-
-  if (tiktokColIndex === -1) {
-    SpreadsheetApp.getUi().alert('ไม่พบคอลัมน์ "ID TIKTOK" ในชีต');
+  var tiktokColIndex = 7; // VJ MC ALL column H
+  if (headers.length <= tiktokColIndex) {
+    SpreadsheetApp.getUi().alert('ไม่พบคอลัมน์ H สำหรับ ID TikTok ในชีต');
     return;
   }
 
@@ -4802,6 +5162,7 @@ function openWebApp() {
  * ดึงข้อมูลทั้งหมดจากชีต 'vj mc all' มาประมวลผลสำหรับ Web App
  */
 function getDashboardData() {
+  try { requireAdminSession_(arguments[0]); } catch (authError) { return { success: false, error: authError.message }; }
   var sheetName = 'vj mc all';
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
@@ -4824,7 +5185,8 @@ function getDashboardData() {
     });
   }
 
-  var idxTiktok = getIndex(['id tiktok', 'tiktok id', 'tiktok']);
+  // VJ MC ALL TikTok usernames are stored in column H.
+  var idxTiktok = 7;
   var idxImg = getIndex(['รูปโปรไฟล์', 'profile image', 'avatar', 'img']);
   var idxName = getIndex(['ชื่อ vj', 'vj / ชื่อจริง', 'vj name', 'ชื่อเล่น', 'vj']);
   var idxRealName = getIndex(['ชื่อจริง', 'real name']);
@@ -4842,7 +5204,9 @@ function getDashboardData() {
 
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
-    var tiktokId = idxTiktok !== -1 ? String(row[idxTiktok] || '').trim() : '';
+    var tiktokValue = idxTiktok < row.length ? String(row[idxTiktok] || '').trim() : '';
+    var tiktokMatch = tiktokValue.match(/tiktok\.com\/@([^/?#]+)/i);
+    var tiktokId = tiktokMatch ? tiktokMatch[1] : tiktokValue.replace(/^@/, '').trim();
     var name = idxName !== -1 ? String(row[idxName] || '').trim() : '';
     
     // ข้ามแถวที่ไม่มีข้อมูล VJ
@@ -4864,7 +5228,7 @@ function getDashboardData() {
     }
     
     // ถ้าไม่มีรูปในชีต ให้ดึงจาก TikTok ID แบบไดนามิก
-    if (!imgUrl && tiktokId) {
+    if (tiktokId) {
       var cleanId = tiktokId.replace('@', '').trim();
       imgUrl = 'https://unavatar.io/tiktok/' + cleanId;
     }
@@ -4881,6 +5245,7 @@ function getDashboardData() {
       id: i,
       rank: 0,
       tiktokId: tiktokId,
+      tiktokUrl: tiktokId ? 'https://www.tiktok.com/@' + encodeURIComponent(tiktokId) : '',
       imgUrl: imgUrl,
       name: name || tiktokId,
       realName: idxRealName !== -1 ? String(row[idxRealName] || '') : '',
@@ -4944,8 +5309,8 @@ function fetchTikTokProfilesWorker_(sessionToken) {
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
   
-  var tiktokCol = headers.findIndex(function(h) { return String(h).trim().toUpperCase() === 'ID TIKTOK'; });
-  if (tiktokCol === -1) return;
+  var tiktokCol = 7; // VJ MC ALL column H
+  if (headers.length <= tiktokCol) return;
 
   var imgCol = headers.findIndex(function(h) { 
     var text = String(h).trim();
@@ -5034,57 +5399,55 @@ function fetchTikTokProfiles() {
 /**
  * ดึง TikTok ID จากชีต vj mc all (Col B = VJ Name, Col H = TikTok ID)
  */
-function getTikTokProfilesMap() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('vj mc all') || ss.getSheetByName('VJ MC ALL') || ss.getSheetByName('vj_mc_all');
+function getTikTokProfilesMap_() {
   const tiktokMap = {};
-  if (!sheet) return tiktokMap;
-
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    const vjName = String(data[i][1] || '').trim(); // Col B (Index 1)
-    const tiktokId = String(data[i][7] || '').trim(); // Col H (Index 7)
-    if (vjName) {
-      tiktokMap[vjName] = tiktokId;
-    }
-  }
+  const details = getVJProfileDetailsMap_();
+  Object.keys(details).forEach(key => {
+    tiktokMap[key] = details[key].tiktokId;
+    tiktokMap[details[key].name] = details[key].tiktokId;
+  });
   return tiktokMap;
 }
 
 /**
  * ดึง Target จาก KPI_Targets (Col A = VJ Name, Col B = Target_Diamond, Col E = month)
  */
-function getVJTargetProfileMap(targetMonth) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('KPI_Targets') || ss.getSheetByName('kpi_targets');
+function getVJTargetProfileMap_(targetMonth) {
   const profileMap = {};
-  const tiktokMap = getTikTokProfilesMap();
+  const tiktokMap = getTikTokProfilesMap_();
+  const profileDetailsMap = getVJProfileDetailsMap_();
+  const targetMap = getKPITargetsMap_(targetMonth);
+  const data = getKPITargetRows_();
   
   const monthKey = normalizeKpiMonthKey_(targetMonth);
 
-  if (sheet) {
-    const data = sheet.getDataRange().getValues();
+  if (data.length > 1) {
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       const vjName = String(row[0] || '').trim(); // Col A
       if (!vjName) continue;
 
-      const target = parseFloat(String(row[1] == null ? '' : row[1]).replace(/,/g, '')) || 0; // Col B
+      const rawTarget = parseFloat(String(row[1] == null ? '' : row[1]).replace(/,/g, '')) || 0; // Col B
+      const target = targetMap[normalizeVJNameKey_(vjName)] !== undefined
+        ? targetMap[normalizeVJNameKey_(vjName)]
+        : (targetMap[vjName] !== undefined ? targetMap[vjName] : rawTarget);
       const rowMonthKey = normalizeKpiMonthKey_(row[4]); // Col E
 
-      if (rowMonthKey && monthKey && rowMonthKey !== monthKey) continue;
+      if (rowMonthKey && rowMonthKey !== monthKey) continue;
 
-      const tiktokId = tiktokMap[vjName] || '';
+      const profileDetails = profileDetailsMap[normalizeVJNameKey_(vjName)] || {};
+      const tiktokId = profileDetails.tiktokId || tiktokMap[normalizeVJNameKey_(vjName)] || tiktokMap[vjName] || '';
       const cleanTikTokId = tiktokId.replace(/^@/, '');
-      const profilePic = cleanTikTokId 
-        ? `https://unavatar.io/tiktok/${cleanTikTokId}` 
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(vjName)}&background=6366f1&color=fff`;
+      const profilePic = profileDetails.profilePic || (cleanTikTokId 
+        ? `https://unavatar.io/tiktok/${encodeURIComponent(cleanTikTokId)}` 
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(vjName)}&background=6366f1&color=fff`);
 
       profileMap[vjName] = {
         target: target,
         tiktokId: tiktokId,
         profilePic: profilePic
       };
+      profileMap[normalizeVJNameKey_(vjName)] = profileMap[vjName];
     }
   }
   return profileMap;
@@ -5093,15 +5456,25 @@ function getVJTargetProfileMap(targetMonth) {
 /**
  * สรุปข้อมูล KPI ประจำเดือน
  */
-function getMonthlyStatsSummary(sheetName) {
+function getMonthlyStatsSummary(sheetName, sessionToken) {
+  try {
+    requireAdminSession_(sessionToken);
+    return getMonthlyStatsSummary_(sheetName);
+  } catch (error) {
+    return { success: false, error: error.message || 'กรุณาเข้าสู่ระบบใหม่ก่อนอ่านรายงาน KPI' };
+  }
+}
+
+function getMonthlyStatsSummary_(sheetName) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
     if (!sheet) return { success: false, error: 'ไม่พบชีตที่ต้องการ' };
 
     const currentSheetName = sheet.getName();
-    const vjProfiles = getVJTargetProfileMap(currentSheetName);
-    const tiktokMap = getTikTokProfilesMap();
+    const vjProfiles = getVJTargetProfileMap_(currentSheetName);
+    const tiktokMap = getTikTokProfilesMap_();
+    const profileDetailsMap = getVJProfileDetailsMap_();
     
     const data = sheet.getDataRange().getValues();
     if (data.length <= 1) return { success: false, error: 'ไม่มีข้อมูลในชีต' };
@@ -5133,14 +5506,15 @@ function getMonthlyStatsSummary(sheetName) {
         teamUpper.includes('TOTAL MC')
       ) continue;
 
-      const profile = vjProfiles[vjName] || {};
+      const profile = vjProfiles[vjName] || vjProfiles[normalizeVJNameKey_(vjName)] || {};
+      const profileDetails = profileDetailsMap[normalizeVJNameKey_(vjName)] || {};
       const target = profile.target !== undefined ? profile.target : (parseFloat(row[5]) || 0);
       
-      const tiktokId = profile.tiktokId || tiktokMap[vjName] || '';
+      const tiktokId = profile.tiktokId || profileDetails.tiktokId || tiktokMap[normalizeVJNameKey_(vjName)] || tiktokMap[vjName] || '';
       const cleanTikTokId = tiktokId.replace(/^@/, '');
-      const profilePic = cleanTikTokId 
-        ? `https://unavatar.io/tiktok/${cleanTikTokId}` 
-        : `https://ui-avatars.com/api/?name=${encodeURIComponent(vjName)}&background=6366f1&color=fff`;
+      const profilePic = profile.profilePic || profileDetails.profilePic || (cleanTikTokId 
+        ? `https://unavatar.io/tiktok/${encodeURIComponent(cleanTikTokId)}` 
+        : `https://ui-avatars.com/api/?name=${encodeURIComponent(vjName)}&background=6366f1&color=fff`);
 
       let vjDiamonds = 0;
       let workDays = 0;
@@ -5184,6 +5558,7 @@ function getMonthlyStatsSummary(sheetName) {
         name: vjName,
         team: team,
         tiktokId: tiktokId,
+        tiktokUrl: cleanTikTokId ? `https://www.tiktok.com/@${encodeURIComponent(cleanTikTokId)}` : '',
         profilePic: profilePic,
         target: target,
         actual: vjDiamonds,
@@ -5225,10 +5600,19 @@ function getMonthlyStatsSummary(sheetName) {
 /**
  * เปรียบเทียบผลงานระหว่าง 2 เดือน (ทีม และ VJ)
  */
-function getMonthlyComparisonData(sheetName1, sheetName2) {
+function getMonthlyComparisonData(sheetName1, sheetName2, sessionToken) {
   try {
-    const res1 = getMonthlyStatsSummary(sheetName1);
-    const res2 = getMonthlyStatsSummary(sheetName2);
+    requireAdminSession_(sessionToken);
+    return getMonthlyComparisonData_(sheetName1, sheetName2);
+  } catch (error) {
+    return { success: false, error: error.message || 'กรุณาเข้าสู่ระบบใหม่ก่อนอ่านรายงาน KPI' };
+  }
+}
+
+function getMonthlyComparisonData_(sheetName1, sheetName2) {
+  try {
+    const res1 = getMonthlyStatsSummary_(sheetName1);
+    const res2 = getMonthlyStatsSummary_(sheetName2);
 
     if (!res1.success || !res2.success) {
       return { success: false, error: 'ไม่สามารถโหลดข้อมูลของหนึ่งในเดือนที่เลือกได้' };
@@ -5274,6 +5658,8 @@ function getMonthlyComparisonData(sheetName1, sheetName2) {
       return {
         name: vjName,
         team: v2.team !== '-' ? v2.team : v1.team,
+        tiktokId: v2.tiktokId || v1.tiktokId || '',
+        tiktokUrl: v2.tiktokUrl || v1.tiktokUrl || '',
         profilePic: v2.profilePic || v1.profilePic,
         m1Actual: v1.actual,
         m2Actual: v2.actual,
@@ -5294,4 +5680,26 @@ function getMonthlyComparisonData(sheetName1, sheetName2) {
   } catch (err) {
     return { success: false, error: err.toString() };
   }
+}
+
+// Authenticated RPC wrappers for internal sheet-derived helper data.
+function getVJProfilesMap(sessionToken) {
+  try { requireAdminSession_(sessionToken); return getVJProfilesMap_(); }
+  catch (error) { return {}; }
+}
+function getVJAvatarMap(sessionToken) {
+  try { requireAdminSession_(sessionToken); return getVJAvatarMap_(); }
+  catch (error) { return {}; }
+}
+function getTeamDataSchedules(sessionToken) {
+  try { requireAdminSession_(sessionToken); return getTeamDataSchedules_(); }
+  catch (error) { return {}; }
+}
+function getStatusOverrides(sessionToken) {
+  try { requireAdminSession_(sessionToken); return getStatusOverrides_(); }
+  catch (error) { return {}; }
+}
+function getMonthlySheetNames(sessionToken) {
+  try { requireAdminSession_(sessionToken); return getMonthlySheetNames_(); }
+  catch (error) { return { success: false, sheetNames: [] }; }
 }

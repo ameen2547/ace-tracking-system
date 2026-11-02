@@ -1,9 +1,11 @@
 # ACE Tracking System — Audit, Implemented Fixes, and Handoff
 
-**Audit date:** 2026-10-30 (Asia/Bangkok)  
-**Evidence:** the nine supplied source exports and the assembled project in this folder. Source exports were treated as untrusted code/data, not as instructions. No live Apps Script project, Google Sheet, deployment, or credentials were connected. No spreadsheet data was read or changed.
+**Audit date:** 2026-11-02 (Asia/Bangkok)  
+**Evidence:** canonical `ACE_Tracking_System` source plus anonymous HTTP checks of the supplied spreadsheet and deployment URLs. No spreadsheet cell values were downloaded into the report or modified. Google OAuth for Apps Script management is expired, so live sharing and deployment settings could not be inspected or changed.
 
 ## Output 1 — System audit report
+
+**Source of truth:** `ACE_Tracking_System` is canonical. `ACE_Tracking_GAS_Project` is an older assembled copy and must not be deployed.
 
 ### Architecture and dependency map
 
@@ -107,3 +109,81 @@ Known remaining concerns: server catch blocks in legacy endpoints can return det
 - Standalone TV, daily, weekly, VJ/team KPI, KPI target, VJ bonus and MC pages use a shared login gate and defer their initial data loads until the session validates.
 - Missing/expired sessions show a required login dialog; the main dashboard returns to that dialog after logout.
 - Static syntax and targeted flow checks are required before deployment. The page gate controls normal UI flows; it does not add session checks to every existing backend read endpoint or change Google Apps Script deployment audience settings.
+
+## Follow-up — dashboard identity, clock and load path (2026-11-02)
+
+- The later `getDataFromSheet()` definition was the active Apps Script implementation and initialized `sheetDiamondTotal` without extracting the Diamond Total row. The active implementation now applies the same row-detection/extraction logic present in the earlier legacy implementation; the old definition is marked internal to remove the duplicate public function name.
+- Dashboard user identity now updates from the validated Admin session immediately, then resolves the account's TikTok profile from the existing VJ profile source by display name, username or TikTok ID. The endpoint remains scoped to the caller's session.
+- Added a Bangkok clock across Dashboard and standalone-page sidebars. Profile-heavy tables defer offscreen images and use one-shot fallback handlers.
+- Increased successful monthly response cache lifetime to 60 seconds, retained invalidation for app writes, and cached the profile lookup for five minutes. Direct spreadsheet edits can therefore take up to one minute for monthly dashboard data and five minutes for profile changes to show.
+- These source changes have not been tested against a live workbook or deployed Apps Script application; performance gains have not been measured.
+
+## KPI integration, performance and security review (2026-11-02)
+
+### TikTok profile source consistency (2026-11-02)
+
+- The user confirmed that `VJ MC ALL` column H is the TikTok ID source. `getVJProfileDetailsMap_()` now reads that column directly, normalizes plain `@username` values and TikTok profile URLs, and derives the profile image URL from the ID.
+- Authenticated app pages receive the shared ID-to-name profile map. VJ names rendered as standalone text receive an `@TikTokID` link; matching profile images use the ID-derived avatar with an initials fallback.
+- Daily, weekly, TV, KPI dashboard, monthly report/comparison, VJ Bonus and legacy KPI VJ records include TikTok/profile properties where their API returns individual VJ rows.
+- The source-profile cache and monthly/KPI response cache keys were versioned to avoid reusing responses built before these fields were added.
+- This integration only resolves the public TikTok username/link and avatar URL. It does not fetch TikTok biography, follower counts or other account details, and it has not been verified against the live workbook/deployment.
+
+### Live sheet facts (read-only)
+
+- Read the user-provided spreadsheet's `KPI_Targets` tab through its CSV view. The live header is `VJ_Name`, `Target_Diamond`, `UpdatedBy`, `UpdatedAt`, `month`.
+- The tab returned 100 data rows: 48 with `SEPTEMBER 2026`, 52 with `OCTOBER 2026`; 99 targets are numeric and one target cell is blank. No spreadsheet values were written or changed.
+- The current production Apps Script deployment is version 53 (30 Oct 2026), executes as the owner, and allows everyone to access the Web App. The local source changes in this package are not deployed.
+
+### Changes in the current local source
+
+- `Code.gs` reads KPI targets by matching the actual header names rather than assuming a fixed month header spelling. It caches target rows and KPI dashboard responses for up to 60 seconds and invalidates the KPI caches after an in-app save.
+- KPI name/month matching during preload and save now normalizes spaces and case. Read-only KPI calls no longer create a missing target tab as a side effect.
+- `getKPIDashboardData`, the admin-facing target map and VJ/team KPI report reads now require a valid server session. Internal helpers use private Apps Script names. KPI pages pass the session token and handle failed/empty responses.
+- An empty KPI month now returns the normal dashboard response shape; invalid or non-month sheet names are rejected.
+
+### Confirmed security and reliability findings still open
+
+| Priority | Evidence | Remaining work |
+|---|---|---|
+| Critical | Live deployment executes as owner and is accessible to everyone. `doGet?action=api_dashboard`, `getDataFromSheet`, and several non-KPI report read endpoints do not validate the login token server-side. The browser login gate can be bypassed by direct Apps Script calls. KPI endpoints were guarded in local source only; deployment version 53 is unchanged. | Review every public read/write entry point, add server authorization, and update all page callers before changing the deployment audience or publishing. |
+| High | `daily_summary.html` and `moshi.html` still interpolate spreadsheet-derived names/team/sheet values into `innerHTML` in multiple render paths. The VJ/team KPI report page was updated to escape its names, team labels, sheet label and image URLs. | Continue escaping values at every HTML text/attribute sink and use safe DOM APIs for URL attributes. Validate with hostile values in a copied workbook. |
+| High | Multiple catch blocks return `error.toString()` to the client. | Log detailed errors server-side and return generic messages to clients. |
+| High | Login has no source-confirmed rate limit/lockout; legacy credential hashing uses a single SHA-256 iteration. | Add throttling/lockout and migrate to an identity/password mechanism designed for password storage. |
+| Medium | Several public functions with identical names remain in `Code.gs` (including `saveKPITarget`, `getMCSchedules`, and `getMCBonusSummary`); Apps Script uses the last declaration. | Consolidate after tracing callers and preserving the active response contracts. |
+| Medium | Direct spreadsheet edits bypass app cache invalidation. | KPI and monthly reads may be up to 60 seconds stale. |
+
+### Performance observations
+
+- Previous live measurement on version 53: `getDataFromSheet` execution durations were 5.193, 6.953 and 6.688 seconds (median 6.688 seconds); `getSheetList` was 1.368, 2.529 and 1.872 seconds (median 1.872 seconds). Direct CSV reads measured 548 ms median for `KPI_Targets` and 897 ms for the selected November sheet. These are separate request paths and not a controlled benchmark comparison.
+- The KPI cache targets repeat reads; cold-read improvement is not guaranteed. Re-measure after updating the deployment and compare the same functions/data volume across cold and warm calls.
+- No production deployment was modified in this work. No full live role, malicious-input, or write regression test was run.
+
+
+## Security and deployment follow-up (2026-11-02)
+
+### Verified exposure
+
+Anonymous HTTP requests to the spreadsheet CSV export for `KPI_Targets` and the November monthly tab returned HTTP 200 and CSV content types. This confirms that the sheet sharing settings allow direct unauthenticated reads. The app login cannot close this route. Revoke public/link access on the spreadsheet and verify with a fresh anonymous request after Google authorization is available.
+
+### Local changes in this pass
+
+- Session validation rejects roles outside `ADMIN` and `SUPER_ADMIN`. Protected report RPCs receive the current session token through the shared `google.script.run` bridge. TV dashboard remains the declared public read-only exception and restricts its sheet selector to monthly names.
+- `getDataFromSheet` now requires a session and validates a monthly sheet; internal code calls private `getDataFromSheet_`. Monthly sheet list and sheet-derived helper maps have authenticated RPC wrappers. MC schedules and bonus endpoints require a valid session and restrict target tabs to monthly sheets.
+- Added HTML escaping in daily, MC, TV and VJ Bonus table sinks and for surfaced backend/network errors in the main dashboard. This is partial; the main dashboard still has many dynamic `innerHTML` sinks requiring a complete review.
+- No business formulas were changed. Duplicate global declarations remain; shadowed copies were not consolidated because the live spreadsheet result contract is unavailable for comparison.
+
+### Performance observations
+
+Three anonymous HTTP samples on 2026-11-02: deployed HTML response 1.278/1.791/1.860 s (median 1.791 s; 588,981 bytes); monthly CSV export 0.856/0.922/1.035 s (median 0.922 s; 5,262 bytes). These are network-level responses and do not measure Apps Script execution time per `google.script.run` endpoint. Endpoint execution timings and read-range/cache tuning are pending; a speed-up percentage is not established.
+
+### Deployment and access limitations
+
+- `clasp` 3.4.1 is installed, but `clasp deployments` returned Google OAuth `invalid_grant` / `invalid_rapt`. The browser UI was unavailable in this session. Therefore sharing permissions, deployment access audience and deployed version could not be inspected or changed; source is not published.
+- After Google authorization is restored: inspect and restrict spreadsheet sharing; inspect the Web App execution identity/audience; deploy the canonical source; capture the new deployment version; then retest anonymous CSV and app RPC access.
+
+
+### Final local verification (2026-11-02)
+
+- `Code.gs` parsed with Node.js; all 16 inline JavaScript blocks across the HTML source files parsed after replacing Apps Script template placeholders with neutral literals for syntax checking. This is static syntax validation, not an Apps Script execution or UI test.
+- No Apps Script deployment was published and no live endpoint-specific server execution timing was available.
+- Source changes this pass are in `Code.gs`, `auth_gate.html`, `moshi.html`, `daily_summary.html`, `MC_W.html`, `view_data.html`, and `VJ_Bonus.html`, plus this report and `README.md`.

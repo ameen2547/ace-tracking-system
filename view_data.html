@@ -219,22 +219,22 @@
       <!-- Live KPI Summary Stats -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 w-full lg:w-auto">
         <div class="bg-slate-900/80 rounded-xl p-3 px-5 border border-slate-800/80 flex flex-col justify-center">
-          <span class="text-slate-400 text-xs font-semibold uppercase tracking-wider">ยอดรวมประจำวัน</span>
+          <span id="tv-label-daily-total" class="text-slate-400 text-xs font-semibold uppercase tracking-wider">ยอดรวมประจำวัน</span>
           <div class="text-xl md:text-2xl font-black text-emerald-400 mt-0.5" id="stat-daily-diamonds">0 💎</div>
         </div>
 
         <div class="bg-slate-900/80 rounded-xl p-3 px-5 border border-slate-800/80 flex flex-col justify-center">
-          <span class="text-slate-400 text-xs font-semibold uppercase tracking-wider">ยอดสะสมเดือนนี้</span>
+          <span id="tv-label-month-total" class="text-slate-400 text-xs font-semibold uppercase tracking-wider">ยอดสะสมเดือนนี้</span>
           <div class="text-xl md:text-2xl font-black text-indigo-400 mt-0.5" id="stat-monthly-diamonds">0 💎</div>
         </div>
 
         <div class="bg-slate-900/80 rounded-xl p-3 px-5 border border-slate-800/80 flex flex-col justify-center">
-          <span class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Top VJ ประจำวัน</span>
+          <span id="tv-label-top-daily" class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Top VJ ประจำวัน</span>
           <div class="text-sm md:text-base font-bold text-amber-300 truncate mt-0.5" id="stat-top-daily">-</div>
         </div>
 
         <div class="bg-slate-900/80 rounded-xl p-3 px-5 border border-slate-800/80 flex flex-col justify-center">
-          <span class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Top VJ ประจำเดือน</span>
+          <span id="tv-label-top-monthly" class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Top VJ ประจำเดือน</span>
           <div class="text-sm md:text-base font-bold text-amber-400 truncate mt-0.5" id="stat-top-monthly">-</div>
         </div>
       </div>
@@ -255,6 +255,7 @@
 
       <!-- Controls & Live Clock -->
       <div class="flex items-center gap-4 text-right">
+        <select id="lang-select" onchange="switchTVLanguage(this.value)" aria-label="Language" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200"><option value="th">🇹🇭 ไทย</option><option value="zh">🇨🇳 中文</option></select>
         <!-- Controls: Hide Score & Mode Switcher -->
         <div class="flex flex-col gap-1 items-end">
           <button id="toggle-score-btn" onclick="toggleScoreVisibility()" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 transition">
@@ -353,6 +354,7 @@
     let showScores = true; // Flag สำหรับ เปิด/ซ่อน คะแนน
     let viewMode = 'vj';   // Mode: 'vj' หรือ 'team'
     let currentData = null;
+    let currentTVLanguage = 'th';
 
     let prevDailyRanks = {};
     let prevMonthlyRanks = {};
@@ -390,10 +392,10 @@
 
       if (showScores) {
         btnIcon.innerText = '👁️';
-        btnText.innerText = 'ซ่อนคะแนน';
+        btnText.innerText = currentTVLanguage === 'zh' ? '隐藏分数' : 'ซ่อนคะแนน';
       } else {
         btnIcon.innerText = '🙈';
-        btnText.innerText = 'แสดงคะแนน';
+        btnText.innerText = currentTVLanguage === 'zh' ? '显示分数' : 'แสดงคะแนน';
       }
 
       if (currentData) renderCurrentView();
@@ -408,21 +410,45 @@
       if (mode === 'vj') {
         tabVj.className = 'px-5 py-2 rounded-lg font-extrabold text-sm transition bg-indigo-600 text-white shadow-lg shadow-indigo-600/30';
         tabTeam.className = 'px-5 py-2 rounded-lg font-extrabold text-sm transition text-slate-400 hover:text-white hover:bg-slate-800';
-        document.getElementById('left-card-title').innerHTML = '<span class="text-emerald-400">⚡</span> อันดับประจำวัน (Daily Leaderboard)';
-        document.getElementById('right-card-title').innerHTML = '<span class="text-indigo-400">👑</span> อันดับประจำเดือน (Monthly Diamond)';
+        document.getElementById('left-card-title').innerHTML = currentTVLanguage === 'zh' ? '<span class="text-emerald-400">⚡</span> 每日排行榜' : '<span class="text-emerald-400">⚡</span> อันดับประจำวัน (Daily Leaderboard)';
+        document.getElementById('right-card-title').innerHTML = currentTVLanguage === 'zh' ? '<span class="text-indigo-400">👑</span> 本月 Diamond 排行' : '<span class="text-indigo-400">👑</span> อันดับประจำเดือน (Monthly Diamond)';
       } else {
         tabTeam.className = 'px-5 py-2 rounded-lg font-extrabold text-sm transition bg-indigo-600 text-white shadow-lg shadow-indigo-600/30';
         tabVj.className = 'px-5 py-2 rounded-lg font-extrabold text-sm transition text-slate-400 hover:text-white hover:bg-slate-800';
-        document.getElementById('left-card-title').innerHTML = '<span class="text-emerald-400">🛡️</span> อันดับทีมประจำวัน (Daily Team Rank)';
-        document.getElementById('right-card-title').innerHTML = '<span class="text-indigo-400">🏆</span> อันดับทีมประจำเดือน (Monthly Team Rank)';
+        document.getElementById('left-card-title').innerHTML = currentTVLanguage === 'zh' ? '<span class="text-emerald-400">🛡️</span> 每日团队排名' : '<span class="text-emerald-400">🛡️</span> อันดับทีมประจำวัน (Daily Team Rank)';
+        document.getElementById('right-card-title').innerHTML = currentTVLanguage === 'zh' ? '<span class="text-indigo-400">🏆</span> 月度团队排名' : '<span class="text-indigo-400">🏆</span> อันดับทีมประจำเดือน (Monthly Team Rank)';
       }
 
       if (currentData) renderCurrentView();
     }
 
+    function switchTVLanguage(lang) {
+      currentTVLanguage = lang === 'zh' ? 'zh' : 'th';
+      if (window.setACECurrentLanguage_) window.setACECurrentLanguage_(currentTVLanguage);
+      const zh = currentTVLanguage === 'zh';
+      document.getElementById('sheet-title-info').textContent = currentData ? formatTVSheetInfo_(currentData) : (zh ? '正在加载系统数据...' : 'กำลังโหลดข้อมูลระบบ...');
+      const labelTexts = zh ? ['今日总额','本月累计','今日 Top VJ','本月 Top VJ'] : ['ยอดรวมประจำวัน','ยอดสะสมเดือนนี้','Top VJ ประจำวัน','Top VJ ประจำเดือน'];
+      document.querySelectorAll('header .grid span').forEach((el,index)=>{if(index<labelTexts.length)el.textContent=labelTexts[index];});
+      document.getElementById('scroll-status-text').textContent = zh ? (isAutoScrollEnabled ? '自动滚动：开启' : '自动滚动：关闭') : (isAutoScrollEnabled ? 'Auto-Scroll: ON' : 'Auto-Scroll: OFF');
+        document.getElementById('score-btn-text').textContent = zh ? (showScores ? '隐藏分数' : '显示分数') : (showScores ? 'ซ่อนคะแนน' : 'แสดงคะแนน');
+      ['tv-label-daily-total','tv-label-month-total','tv-label-top-daily','tv-label-top-monthly'].forEach((id,index)=>{const el=document.getElementById(id);if(el)el.textContent=(zh?['今日总额','本月累计','今日 Top VJ','本月 Top VJ']:['ยอดรวมประจำวัน','ยอดสะสมเดือนนี้','Top VJ ประจำวัน','Top VJ ประจำเดือน'])[index];});
+      document.getElementById('tab-vj').innerHTML = zh ? '👤 VJ 排行榜' : '👤 อันดับ VJ (VJ Leaderboard)';
+      document.getElementById('tab-team').innerHTML = zh ? '🏆 团队排行榜' : '🏆 อันดับทีม (Team Leaderboard)';
+      document.getElementById('last-updated-text').textContent = zh ? '最近更新：' + (currentData && currentData.timestamp || '--:--:--') : 'อัปเดตล่าสุด: ' + (currentData && currentData.timestamp || '--:--:--');
+      const footerStatus = document.querySelector('footer > div:first-child');
+      if (footerStatus) footerStatus.innerHTML = '<span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-ping"></span>' + (zh ? '系统状态：' : 'สถานะระบบ: ') + '<span class="text-slate-200 font-medium">Real-time Data Stream Connected</span>';
+      switchViewMode(viewMode);
+    }
+
     function formatDiamondValue(val) {
       if (!showScores) return '🔒 ••••••';
       return val.toLocaleString();
+    }
+
+    function formatTVSheetInfo_(res) {
+      return currentTVLanguage === 'zh'
+        ? `${res.sheetName} — ${res.currentDay} / ${res.totalDaysInMonth} 日 (VJ ${res.vjCount} 人 | 团队 ${res.teamCount || 0})`
+        : `${res.sheetName} — วันที่ ${res.currentDay} / ${res.totalDaysInMonth} ( VJ ${res.vjCount} คน | ${res.teamCount || 0} ทีม )`;
     }
 
     function fetchDashboardData() {
@@ -502,19 +528,20 @@
         if (category === 'vj') {
           const targetRate = type === 'daily' ? item.dailyAchievedRate : item.monthlyAchievedRate;
           htmlContent += `
-            <div class="vj-card glass-panel bg-slate-900/60 rounded-xl p-3 border border-slate-800/80 flex items-center justify-between gap-3" data-vj-name="${item.vjName}">
+            <div class="vj-card glass-panel bg-slate-900/60 rounded-xl p-3 border border-slate-800/80 flex items-center justify-between gap-3" data-vj-name="${window.aceEscapeHtml_(item.vjName)}">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl ${rankBadgeClass} flex items-center justify-center font-bold flex-shrink-0">
                   ${rankIcon}
                 </div>
                 <div class="relative w-12 h-12 flex-shrink-0">
-                  <img src="${item.avatar}" alt="${item.vjName}" class="w-12 h-12 rounded-full object-cover border-2 border-slate-700 shadow-md" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.vjName)}&background=1e1b4b&color=818cf8'">
+                  <img src="${window.aceEscapeHtml_(item.avatar)}" alt="${window.aceEscapeHtml_(item.vjName)}" loading="lazy" decoding="async" class="w-12 h-12 rounded-full object-cover border-2 border-slate-700 shadow-md" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.vjName)}&background=1e1b4b&color=818cf8'">
                 </div>
                 <div>
-                  <div class="font-bold text-slate-100 text-base">${item.vjName}</div>
+                  <div class="font-bold text-slate-100 text-base" data-vj-name="${window.aceEscapeHtml_(item.vjName)}">${window.aceEscapeHtml_(item.vjName)}</div>
+                  ${item.tiktokId ? `<a href="${window.aceEscapeHtml_(item.tiktokUrl)}" target="_blank" rel="noopener noreferrer" class="text-[10px] text-sky-400 hover:underline">@${window.aceEscapeHtml_(item.tiktokId)}</a>` : ''}
                   <div class="text-xs text-slate-400 font-medium flex items-center gap-2 mt-0.5">
-                    <span class="text-indigo-300 bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-800/40">${item.teamName}</span>
-                    <span>⏰ ${item.liveTime}</span>
+                    <span class="text-indigo-300 bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-800/40">${window.aceEscapeHtml_(item.teamName)}</span>
+                    <span>⏰ ${window.aceEscapeHtml_(item.liveTime)}</span>
                   </div>
                 </div>
               </div>
@@ -542,14 +569,14 @@
                 </div>
                 <!-- รูปโปรไฟล์ / โลโก้ทีม -->
                 <div class="relative w-12 h-12 flex-shrink-0">
-                  <img src="${item.teamLogo}" alt="${item.teamName}" class="w-12 h-12 rounded-xl object-cover border-2 border-indigo-500/40 shadow-md" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.teamName)}&background=312e81&color=c7d2fe'">
+                  <img src="${window.aceEscapeHtml_(item.teamLogo)}" alt="${window.aceEscapeHtml_(item.teamName)}" loading="lazy" decoding="async" class="w-12 h-12 rounded-xl object-cover border-2 border-indigo-500/40 shadow-md" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.teamName)}&background=312e81&color=c7d2fe'">
                 </div>
                 <div>
                   <div class="font-black text-slate-100 text-lg flex items-center gap-2">
-                    ${item.teamName}
+                    ${window.aceEscapeHtml_(item.teamName)}
                   </div>
                   <div class="text-xs text-slate-400 font-medium mt-0.5">
-                    จำนวนสมาชิก VJ: <span class="text-indigo-300 font-bold">${item.vjCount} คน</span> | ⏰ ${item.liveTime}
+                    จำนวนสมาชิก VJ: <span class="text-indigo-300 font-bold">${window.aceEscapeHtml_(item.vjCount)} คน</span> | ⏰ ${window.aceEscapeHtml_(item.liveTime)}
                   </div>
                 </div>
               </div>
@@ -757,13 +784,14 @@ function getTVDashboardData(targetSheetName, selectedDay) {
       teamMap[team].monthlyDiamonds += monthlyDiamonds;
       teamMap[team].vjCount += 1;
 
-      let profileImg = avatarMap[memberName] || vjProfiles[memberName] || '';
+      const memberKey = String(memberName || '').trim().replace(/\s+/g, ' ').toLowerCase();
+      let profileImg = avatarMap[memberName] || avatarMap[memberKey] || vjProfiles[memberName] || vjProfiles[memberKey] || '';
       if (!profileImg) {
         profileImg = `https://ui-avatars.com/api/?name=${encodeURIComponent(memberName)}&background=1e1b4b&color=818cf8&bold=true`;
       }
 
       const liveTime = teamLiveSchedules[team] || '18:00 - 02:00';
-      const monthlyTarget = parseFloat(kpiTargets[memberName]) || 0;
+      const monthlyTarget = parseFloat(kpiTargets[memberName] !== undefined ? kpiTargets[memberName] : kpiTargets[memberKey]) || 0;
       const dailyTarget = monthlyTarget > 0 ? (monthlyTarget / totalDaysInMonth) : 0;
 
       const monthlyAchievedRate = monthlyTarget > 0 ? (monthlyDiamonds / monthlyTarget) * 100 : 0;
@@ -841,12 +869,12 @@ function onDataReceived(res) {
   currentData = res;
 
   // อัปเดต UI ส่วน Header
-  document.getElementById('sheet-title-info').innerText = `${res.sheetName} — วันที่ ${res.currentDay} / ${res.totalDaysInMonth} ( VJ ${res.vjCount} คน | ${res.teamCount || 0} ทีม )`;
+  document.getElementById('sheet-title-info').innerText = formatTVSheetInfo_(res);
   document.getElementById('stat-daily-diamonds').innerText = formatDiamondValue(res.totalDailyDiamonds) + ' 💎';
   document.getElementById('stat-monthly-diamonds').innerText = formatDiamondValue(res.totalMonthlyDiamonds) + ' 💎';
   document.getElementById('stat-top-daily').innerText = res.topDailyVJ ? `${res.topDailyVJ.vjName} (${formatDiamondValue(res.topDailyVJ.dailyDiamonds)})` : '-';
   document.getElementById('stat-top-monthly').innerText = res.topMonthlyVJ ? `${res.topMonthlyVJ.monthlyDiamonds ? formatDiamondValue(res.topMonthlyVJ.monthlyDiamonds) : 0})` : '-';
-  document.getElementById('last-updated-text').innerText = `อัปเดตล่าสุด: ${res.timestamp}`;
+  document.getElementById('last-updated-text').innerText = currentTVLanguage === 'zh' ? `最近更新：${res.timestamp}` : `อัปเดตล่าสุด: ${res.timestamp}`;
 
   // หากมีรายการคะแนนเปลี่ยน ให้เลื่อนจอไปหาและแสดง Animation
   if (updatedKeys.length > 0) {
@@ -956,22 +984,23 @@ function renderLeaderboard(containerId, list, type, category, updatedKeys = []) 
     if (category === 'vj') {
       const targetRate = type === 'daily' ? item.dailyAchievedRate : item.monthlyAchievedRate;
       htmlContent += `
-        <div data-card-key="${item.vjName}" class="vj-card glass-panel bg-slate-900/60 rounded-xl p-3 border border-slate-800/80 flex items-center justify-between gap-3 ${cardAnimClass}">
+        <div data-card-key="${window.aceEscapeHtml_(item.vjName)}" class="vj-card glass-panel bg-slate-900/60 rounded-xl p-3 border border-slate-800/80 flex items-center justify-between gap-3 ${cardAnimClass}">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl ${rankBadgeClass} flex items-center justify-center font-bold flex-shrink-0">
               ${rankIcon}
             </div>
             <div class="relative w-12 h-12 flex-shrink-0">
-              <img src="${item.avatar}" alt="${item.vjName}" class="w-12 h-12 rounded-full object-cover border-2 border-slate-700 shadow-md" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.vjName)}&background=1e1b4b&color=818cf8'">
+              <img src="${window.aceEscapeHtml_(item.avatar)}" alt="${window.aceEscapeHtml_(item.vjName)}" loading="lazy" decoding="async" class="w-12 h-12 rounded-full object-cover border-2 border-slate-700 shadow-md" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.vjName)}&background=1e1b4b&color=818cf8'">
             </div>
             <div>
               <!-- ชื่อ VJ พร้อม Animation -->
               <div class="font-bold text-slate-100 text-base">
-                <span class="${nameAnimClass}">${item.vjName}</span>
+                <span class="${nameAnimClass}" data-vj-name="${window.aceEscapeHtml_(item.vjName)}">${window.aceEscapeHtml_(item.vjName)}</span>
+                ${item.tiktokId ? `<a href="${window.aceEscapeHtml_(item.tiktokUrl)}" target="_blank" rel="noopener noreferrer" class="text-[10px] text-sky-400 hover:underline">@${window.aceEscapeHtml_(item.tiktokId)}</a>` : ''}
               </div>
               <div class="text-xs text-slate-400 font-medium flex items-center gap-2 mt-0.5">
-                <span class="text-indigo-300 bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-800/40">${item.teamName}</span>
-                <span>⏰ ${item.liveTime}</span>
+                <span class="text-indigo-300 bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-800/40">${window.aceEscapeHtml_(item.teamName)}</span>
+                <span>⏰ ${window.aceEscapeHtml_(item.liveTime)}</span>
               </div>
             </div>
           </div>
@@ -990,21 +1019,21 @@ function renderLeaderboard(containerId, list, type, category, updatedKeys = []) 
       `;
     } else {
       htmlContent += `
-        <div data-card-key="${item.teamName}" class="vj-card glass-panel bg-slate-900/60 rounded-xl p-4 border border-slate-800/80 flex items-center justify-between gap-3 ${cardAnimClass}">
+        <div data-card-key="${window.aceEscapeHtml_(item.teamName)}" class="vj-card glass-panel bg-slate-900/60 rounded-xl p-4 border border-slate-800/80 flex items-center justify-between gap-3 ${cardAnimClass}">
           <div class="flex items-center gap-4">
             <div class="w-12 h-12 rounded-xl ${rankBadgeClass} flex items-center justify-center font-bold flex-shrink-0">
               ${rankIcon}
             </div>
             <div class="relative w-12 h-12 flex-shrink-0">
-              <img src="${item.teamLogo}" alt="${item.teamName}" class="w-12 h-12 rounded-xl object-cover border-2 border-indigo-500/40 shadow-md" onerror="this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.teamName)}&background=312e81&color=c7d2fe'">
+              <img src="${window.aceEscapeHtml_(item.teamLogo)}" alt="${window.aceEscapeHtml_(item.teamName)}" loading="lazy" decoding="async" class="w-12 h-12 rounded-xl object-cover border-2 border-indigo-500/40 shadow-md" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(item.teamName)}&background=312e81&color=c7d2fe'">
             </div>
             <div>
               <!-- ชื่อทีม พร้อม Animation -->
               <div class="font-black text-slate-100 text-lg flex items-center gap-2">
-                <span class="${nameAnimClass}">${item.teamName}</span>
+                <span class="${nameAnimClass}">${window.aceEscapeHtml_(item.teamName)}</span>
               </div>
               <div class="text-xs text-slate-400 font-medium mt-0.5">
-                จำนวนสมาชิก VJ: <span class="text-indigo-300 font-bold">${item.vjCount} คน</span> | ⏰ ${item.liveTime}
+                ${currentTVLanguage === 'zh' ? 'VJ 成员数：' : 'จำนวนสมาชิก VJ: '}<span class="text-indigo-300 font-bold">${window.aceEscapeHtml_(item.vjCount)} ${currentTVLanguage === 'zh' ? '人' : 'คน'}</span> | ⏰ ${window.aceEscapeHtml_(item.liveTime)}
               </div>
             </div>
           </div>
@@ -1081,11 +1110,11 @@ function updateScrollToggleButtonUI() {
   if (isAutoScrollEnabled) {
     btn.className = "flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer";
     dot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
-    text.innerText = "Auto-Scroll: ON";
+    text.innerText = currentTVLanguage === 'zh' ? '自动滚动：开启' : 'Auto-Scroll: ON';
   } else {
     btn.className = "flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-all opacity-75 active:scale-95 cursor-pointer";
     dot.className = "w-2 h-2 rounded-full bg-slate-500";
-    text.innerText = "Auto-Scroll: OFF";
+    text.innerText = currentTVLanguage === 'zh' ? '自动滚动：关闭' : 'Auto-Scroll: OFF';
   }
 }
 

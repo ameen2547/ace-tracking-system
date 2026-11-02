@@ -1,105 +1,147 @@
-# ACE Tracking System
+# ACE Tracking System — Google Apps Script source bundle
 
-ระบบติดตามผลการทำงานของ VJ และทีม พัฒนาด้วย Google Apps Script และ Google Sheets มีหน้า Dashboard สำหรับดูยอด Diamond, รายงานรายวันและรายสัปดาห์, KPI, VJ Bonus และตารางงาน MC
+**Canonical source:** this `ACE_Tracking_System` folder is the sole source of truth. `ACE_Tracking_GAS_Project` is an older assembled copy and must not be used for deployment. No source files were synced to the live deployment in this pass.
 
-> Repository นี้เก็บ Source Code และแพ็กเกจระบบเท่านั้น การใช้งานจริงต้องติดตั้งใน Apps Script ที่เชื่อมกับ Google Spreadsheet ที่ถูกต้อง
+This bundle maps the supplied source exports into Google Apps Script filenames and includes the source fixes described below. The live `KPI_Targets` tab was read-only verified on 2026-11-02; no spreadsheet data was changed. KPI/bonus formulas were not altered.
 
-## ภาพรวมการทำงาน
+## Files
 
-1. ผู้ใช้เปิด Web App URL ของ Google Apps Script
-2. ฟังก์ชัน doGet ใน Code.gs เลือกหน้าเว็บจากพารามิเตอร์ page หรือเปิดหน้า Dashboard หลัก
-3. หน้า HTML ติดต่อ Backend ด้วย google.script.run
-4. Backend อ่านหรือเขียนชีตผ่าน SpreadsheetApp.getActiveSpreadsheet() ดังนั้น Apps Script ควรผูกกับ Spreadsheet ที่ต้องการใช้งาน
-5. หน้า TV มีการเรียกข้อมูลซ้ำตามรอบเวลา 15 วินาทีตามค่าที่กำหนดใน view_data.html
+- `Code.gs` — backend, routing, Sheet access and server functions
+- `auth_gate.html` — shared required login gate and sidebar navigation for standalone dashboard routes.
+- `KPI_Targets_import.tsv` — supplied September and October 2026 VJ diamond targets, arranged for the `KPI_Targets` sheet.
+- `moshi.html` — default main dashboard
+- `view_data.html` — TV dashboard (`?page=tv`, `view_data`, or `viewdata`)
+- `weekly_tab.html` — weekly dashboard (`?page=weekly`)
+- `daily_summary.html` — daily summary (`?page=daily_summary`)
+- `VJ_Bonus.html` — VJ bonus (`?page=vj_bonus` or `vjbonus`)
+- `MC_W.html` — MC schedule and bonus (`?page=mc_w`)
+- `kpi_vj_data.html` — VJ/team KPI (`?page=kpi_vj` or `M`)
+- `KPI_data.html` — KPI target dashboard (`?page=kpi_data` or `kpi`)
 
-## หน้าเว็บและเส้นทาง
+## KPI target data source
 
-| หน้า | พารามิเตอร์ URL | ไฟล์ |
-| --- | --- | --- |
-| Main Dashboard | ไม่ระบุ page | moshi.html |
-| TV Dashboard | page=tv หรือ page=view_data | view_data.html |
-| Weekly Report | page=weekly | weekly_tab.html |
-| Daily Summary | page=daily_summary | daily_summary.html |
-| VJ Bonus | page=vj_bonus หรือ page=vjbonus | VJ_Bonus.html |
-| MC Schedule / Bonus | page=mc_w | MC_W.html |
-| VJ / Team KPI | page=kpi_vj หรือ page=M | kpi_vj_data.html |
-| KPI Dashboard | page=kpi_data หรือ page=kpi | KPI_data.html |
+The Apps Script reads targets directly from the bound spreadsheet's `KPI_Targets` tab. It locates the VJ name, target and month columns from the header row, including the live sheet's `month` header. It matches month labels without case or repeated-space differences and uses an unscoped row as a default target. Successful reads are cached for up to 60 seconds; saves made through the application invalidate that cache immediately.
 
-ตัวอย่าง: นำ URL ของ Web App มาต่อท้ายด้วย ?page=weekly เพื่อเปิดรายงานรายสัปดาห์
+`KPI_Targets_import.tsv` is an offline snapshot supplied for reference. Do not paste it into a spreadsheet that already contains those records without checking for duplicates. The app does not import or write this file automatically.
 
-นอกจากนี้ Code.gs มี JSON endpoint สำหรับ TV Dashboard ที่เรียกด้วย action=api_dashboard และรองรับพารามิเตอร์ sheet และ day
+## Install in Apps Script
 
-## โครงสร้างไฟล์
+1. Back up the Google Spreadsheet and existing Apps Script project.
+2. Open the spreadsheet and use **Extensions → Apps Script** so the script is bound to the intended spreadsheet. The backend uses `SpreadsheetApp.getActiveSpreadsheet()` in multiple places.
+3. Create or replace the `.gs` and HTML files above. Apps Script HTML filenames omit the `.html` suffix in `createTemplateFromFile()` and `createHtmlOutputFromFile()` calls; preserve the base names and capitalization shown here.
+4. Before first Admin login, set Script Properties `ACE_INITIAL_ADMIN_USERNAME` and `ACE_INITIAL_ADMIN_PASSCODE`. Use a unique passcode with at least 12 characters. On first login, the setup routine updates an account with the same username, replaces an old `1234` account, or appends a new Super Admin; it stores a salted SHA-256 hash and deletes both bootstrap properties only after the sheet write succeeds.
+5. Existing Admin_Users records with passcodes other than `1234` remain usable; each is upgraded to a salted hash after its next successful login. The known weak passcode `1234` is rejected. To migrate an existing default account, set both bootstrap properties before attempting login; the first login replaces the old default row. Back up the sheet first.
+6. Check project timezone, spreadsheet tab names/headers, existing triggers and deployment settings against the original project. This bundle does not include a manifest because the source does not establish the intended timezone or OAuth scopes.
+7. Use a test copy first. Review and authorize requested OAuth scopes using an account with the required access.
+8. Deploy a test Web App version and verify each route, reads, writes, exports, and role behavior with non-production data.
+9. After the test copy passes, update the intended deployment. Retain the previous deployment and source backup for rollback.
 
-| ไฟล์ | หน้าที่ |
-| --- | --- |
-| Code.gs | Backend, doGet routing, การอ่าน/เขียน Google Sheets, KPI, Login, Admin, Bonus และรายงาน |
-| moshi.html | Main Dashboard |
-| view_data.html | TV Dashboard และ leaderboard |
-| daily_summary.html | รายงานประจำวัน |
-| weekly_tab.html | รายงานประจำสัปดาห์ |
-| KPI_data.html | KPI Dashboard |
-| kpi_vj_data.html | รายงาน KPI ของ VJ และทีม |
-| VJ_Bonus.html | รายงานโบนัส VJ |
-| MC_W.html | ตารางงานและรายงานโบนัส MC |
-| auth_gate.html | หน้าหรือส่วนประกอบสำหรับ Login ที่หน้าเว็บเรียกใช้ |
-| KPI_Targets_import.tsv | ข้อมูล KPI target ที่เตรียมไว้สำหรับตรวจสอบและนำเข้า |
-| ACE_SYSTEM_AUDIT.md | บันทึกผลตรวจ Source Code และรายการตรวจสอบก่อนใช้งาน |
-| ACE_Tracking_System_Login_KPI_Updated_20261030_v2.zip | แพ็กเกจ ZIP ของชุดไฟล์ |
+Admin sessions use a token stored in Apps Script `CacheService` for up to six hours. The browser keeps only that opaque token in `sessionStorage` for the current tab; each page validates it with the server before loading data. This keeps the login active while navigating between system pages in the same tab. Signing out from the main dashboard or shared sidebar revokes the cached session. New Admin passcodes must be at least 12 characters. Legacy plaintext credentials are converted on successful login; the existing Admin_Users column layout stays the same.
 
-Apps Script HTML template ใช้ชื่อไฟล์โดยไม่ใส่นามสกุล .html ใน include() และ createTemplateFromFile() เช่น auth_gate และ view_data ให้รักษาตัวพิมพ์เล็ก/ใหญ่ของชื่อไฟล์ตามที่ Code.gs เรียกใช้
+The main Dashboard and standalone report pages have sidebars that collapse on desktop and open as a drawer on mobile. Navigation between routes validates the existing cached session and does not ask for credentials again while it remains valid.
 
-## ชีตที่ Backend อ้างถึง
+## Routes
 
-ชื่อชีตต่อไปนี้ปรากฏใน Source Code หน้าที่สรุปอ้างอิงจากชื่อและการใช้งานในฟังก์ชัน Backend:
+- Main dashboard: deployment URL without a `page` parameter
+- TV: `?page=tv`
+- Weekly: `?page=weekly`
+- Daily: `?page=daily_summary`
+- VJ bonus: `?page=vj_bonus`
+- MC: `?page=mc_w`
+- VJ/team KPI: `?page=kpi_vj`
+- KPI targets: `?page=kpi_data`
+- TV JSON API: `?action=api_dashboard` (optional `sheet` and `day` parameters)
 
-| ชื่อชีต | การใช้งานที่พบในโค้ด |
-| --- | --- |
-| KPI_Targets | เป้าหมาย Diamond รายบุคคล โดยมี VJ_Name, Target_Diamond, UpdatedBy, UpdatedAt และ Month_Sheet |
-| KPI_Data | ข้อมูล KPI รายบุคคล/ทีม |
-| Admin_Users | บัญชีผู้ใช้และบทบาท Admin |
-| System_Logs | บันทึกเหตุการณ์ของระบบ |
-| Status_Overrides | ค่า Status ที่ผู้ดูแลปรับกำหนด |
-| MC_Schedules | ตารางงาน MC |
-| MC_Bonus_Logs | ประวัติผลโบนัส MC |
-| vj mc all / vj_mc_all | แหล่งข้อมูลโปรไฟล์ VJ ที่ Backend รองรับ |
-| Team Data / Team_Data | ข้อมูลทีมและตารางเวลา Live ที่ Backend รองรับ |
-| BonusData และ VJ_Profiles | ชีตที่มีการอ้างถึงในฟังก์ชันระบบโบนัสหรือโปรไฟล์ |
+## Remaining checks before production
 
-บางฟังก์ชันสร้างชีตระบบพร้อมหัวตารางเมื่อไม่พบชีตนั้น ส่วนชื่อและหัวคอลัมน์ของชีตข้อมูลรายเดือนขึ้นอยู่กับ Spreadsheet ที่นำมาเชื่อม โปรดสำรองและตรวจโครงสร้างชีตจริงก่อนติดตั้ง
+- Existing legacy passcodes remain plaintext until their owners log in successfully. Configure the bootstrap properties and rotate any old default credentials before deployment.
+- Login rate limiting and account lockout are not implemented; deployment access settings must still limit who can reach the Web App.
+- Complete sheet schemas, write behavior, deployment settings and KPI/bonus business rules still require validation against a copied workbook and the live Apps Script project. The read-only `KPI_Targets` tab header and data shape were verified on 2026-11-02.
+- Static JavaScript parsing and route checks pass. No live Google Sheets, browser functional, or deployment test has been performed.
 
-## นำเข้า KPI Target
+## UI and login update (2026-11-02)
 
-ไฟล์ KPI_Targets_import.tsv เป็นข้อมูลที่เตรียมไว้ให้ผู้ดูแลตรวจสอบก่อนนำเข้า ไม่ได้เขียนข้อมูลเข้า Spreadsheet ให้อัตโนมัติ ตรวจชื่อ VJ, เดือน, UpdatedBy และ UpdatedAt ก่อนนำเข้า และตรวจรายการซ้ำของ VJ/เดือนในชีต KPI_Targets ด้วย
+- Moved main Dashboard navigation into a persistent sidebar and added a mobile drawer.
+- Added the same route sidebar to standalone report pages.
+- Kept the session token in tab-scoped `sessionStorage` and validate it against the six-hour Apps Script cache on each route load.
+- Added a logout control to standalone page navigation; it revokes the server-side session and clears the tab token.
+- Reduced the Dashboard toolbar to score entry and a single “More” menu for exports, screenshot, team summary and KPI entry tools.
+- Limited Dashboard editing controls to `ADMIN` and `SUPER_ADMIN`; audit history and Super Admin controls are shown only to `SUPER_ADMIN`. Backend session checks remain the authority for protected operations.
+- Added desktop sidebar collapse/expand controls and fixed horizontal overflow in the navigation.
+- Added a shared operation status modal for Apps Script requests. It identifies loading, saving, exporting and access checks; the TV board suppresses the modal during background refresh after its first load.
+- Added Simplified Chinese controls and interface translations to the VJ Bonus, TV Leaderboard and KPI Dashboard pages; existing language controls now also update the shared operation modal and sidebar.
+- This source update has not been tested against a live Apps Script deployment. Deploy to a test copy first and verify every route and authenticated action.
 
-Backend เลือกเป้าหมายตาม Month_Sheet และสามารถใช้ค่าเป้าหมายทั่วไปเมื่อไม่มีค่าที่ตรงกับเดือนที่เลือก อย่าเปลี่ยนสูตรหรือค่าธุรกิจโดยไม่ตรวจสอบข้อมูลและกติกาที่ใช้งานจริง
+## KPI target and TikTok profile integration (2026-11-02)
 
-## ติดตั้งและ Deploy
+- Monthly KPI targets are read from the `KPI_Targets` tab using VJ name, target diamond and the optional month value in column E. Month-specific values override the default target for the same VJ, matching the existing source behavior.
+- VJ profile lookup reads the `vj mc all` source tab using its header labels when present, with the existing B (VJ name) and H (TikTok ID or image URL) layout as fallback.
+- Reports now resolve target and profile data against normalized VJ names, and profile pages receive a TikTok ID plus a profile image URL derived from that ID when no direct image URL is stored.
+- The profile image URL uses the source project's existing `unavatar.io/tiktok/{id}` provider. Availability depends on that external service and TikTok profile visibility.
+- This update has not been tested against a live Google Sheet or deployment.
 
-1. สำรอง Google Spreadsheet และ Apps Script project เดิมก่อน
-2. เปิด Spreadsheet เป้าหมาย แล้วเลือก Extensions → Apps Script เพื่อให้โปรเจกต์ผูกกับ Spreadsheet ที่ถูกต้อง
-3. เพิ่มหรือแทนที่ไฟล์ Code.gs และไฟล์ HTML ที่ระบุในตารางด้านบน โดยตั้งชื่อ HTML ให้ตรงกับชื่อที่ Backend เรียก
-4. ตรวจแท็บข้อมูลรายเดือนและหัวคอลัมน์ รวมถึงแท็บ KPI_Targets, Admin_Users, System_Logs, Status_Overrides และแท็บของ MC
-5. ตั้ง Script Properties สำหรับบัญชีเริ่มต้น: ACE_INITIAL_ADMIN_USERNAME และ ACE_INITIAL_ADMIN_PASSCODE โดยกำหนด Passcode ที่ไม่ซ้ำและมีความยาวอย่างน้อย 12 ตัวอักษรตามเงื่อนไขใน Source Code
-6. ทดสอบด้วยสำเนา Spreadsheet และข้อมูลที่ไม่ใช่ข้อมูลจริงก่อน อนุญาต OAuth scopes ที่จำเป็น และทดสอบทุกหน้า การอ่าน/เขียนข้อมูล และการแบ่งสิทธิ์
-7. เมื่อทดสอบผ่านแล้วจึงอัปเดต Deployment ที่ใช้งานจริง พร้อมเก็บ Source และ Deployment เดิมไว้สำหรับย้อนกลับ
+## TikTok profile source across app pages (2026-11-02)
 
-ไฟล์ Manifest ของ Apps Script ไม่ได้รวมอยู่ใน Source bundle นี้ ให้ตรวจการตั้งค่าเดิมของโปรเจกต์ เช่น timezone และ OAuth scopes แทนการกำหนดค่าใหม่โดยคาดเดา
+- The `VJ MC ALL` tab's column H is the canonical TikTok ID source. Profile resolution uses that ID to form the TikTok profile link and the existing `unavatar.io/tiktok/{id}` avatar URL.
+- The authenticated shared page gate labels matching VJ names with their `@TikTokID` link and applies the ID-derived avatar to matching profile images across the Dashboard, leaderboard, daily/weekly, KPI and VJ Bonus pages.
+- Daily, weekly, TV, KPI, monthly report, comparison and VJ Bonus responses now include TikTok ID/profile fields where they return individual VJ rows. The matching data cache keys were versioned to prevent serving records without these fields.
+- Public TikTok fields beyond username and avatar are not fetched; the current implementation does not use a TikTok API or scrape account biography/statistics.
+- These source changes have not been tested against a live workbook or deployment.
 
-## Login และความปลอดภัย
+## Monthly sheet selector (2026-11-02)
 
-- หน้า Dashboard และหน้า standalone ที่ใส่ auth_gate จะตรวจสอบ Session ก่อนโหลดข้อมูลหน้า
-- Session ใช้ Script Cache และมีอายุ 6 ชั่วโมงตามโค้ด
-- การสร้างบัญชี Admin เริ่มต้นใช้ Script Properties และ Script Lock
-- บัญชีเดิมที่เก็บ Passcode แบบ plaintext จะถูกย้ายเป็น salted SHA-256 hash หลัง Login สำเร็จตามเส้นทางใน Backend; ควรสำรองแท็บ Admin_Users ก่อน
-- โค้ดไม่มี rate limiting หรือ account lockout สำหรับ Login
-- เส้นทาง JSON action=api_dashboard ถูกประมวลผลใน doGet ก่อนเส้นทางหน้าเว็บ จึงไม่มีการตรวจ Session ใน router branch นี้ ควรตรวจสอบการตั้งค่าการเข้าถึงของ Web App ก่อนเปิดเผยข้อมูล
-- การตั้งค่าสิทธิ์ของ GitHub Repository ไม่ได้กำหนดสิทธิ์ของ Google Apps Script Web App โดยอัตโนมัติ
+- Main and report sheet selectors now list only monthly tabs recognized by the system's month-name parser (English/Thai month names and supported month-year naming), plus ISO `YYYY-MM` names.
+- System tabs such as `App_Config`, logs, settings and bonus tables are omitted from month selectors.
 
-## สถานะการตรวจสอบ
+## Shared navigation and back action (2026-11-02)
 
-มีการตรวจ Source Code และเส้นทางหน้าเว็บแล้ว แต่ยังไม่ได้ทดสอบกับ Spreadsheet จริง, Browser แบบ end-to-end หรือ Deployment จริง ผลการตรวจและข้อจำกัดดูได้จาก ACE_SYSTEM_AUDIT.md
+- The shared sidebar on standalone pages includes links to Dashboard, TV, daily and weekly summaries, KPI pages, VJ Bonus, and MC schedule/bonus.
+- Added a “ย้อนกลับ” action to the shared sidebar and Dashboard sidebar. It returns to the previous same-origin app page and falls back to the Main Dashboard when there is no safe in-app history entry.
+- Enabled the same Apps Script iframe display mode on the Daily and Weekly routes that the other report routes already use, so those pages can render inside the Apps Script panel.
 
-## การมีส่วนร่วมและการเปลี่ยนแปลง
+## Data loading optimization (2026-11-02)
 
-ก่อนแก้ไขสูตร KPI, Diamond หรือ Bonus ให้ตรวจสอบแหล่งข้อมูลและกติกาธุรกิจที่ใช้งานจริงก่อน ทุกการแก้ไขควรทดสอบในสำเนาระบบและเก็บไฟล์เดิมไว้สำหรับ rollback
+- Cached successful `getDataFromSheet()` results for 60 seconds, when the serialized response fits Apps Script CacheService limits. Cached reads skip the repeated monthly range read, profile/status/team/KPI lookups and row transformation.
+- System edits to daily diamonds, status overrides, MC schedule entries and KPI targets invalidate affected cached month data immediately. Direct spreadsheet edits outside the app may take up to 60 seconds to appear.
+- The TV endpoint now reuses the profile map already returned by `getDataFromSheet()` instead of reading the profile sheet again on every refresh.
+- This improves repeated reads and TV refreshes that hit cache. A 50% improvement on every first load cannot be confirmed without timing the live deployment and workbook; large responses above CacheService's item limit bypass response caching.
+
+## Navigation and signed-in user panel (2026-11-02)
+
+- Standalone-page navigation now resolves links from the Apps Script Web App deployment URL, instead of opening relative `?page=...` links inside the embedded `userCodeAppPanel` frame.
+- The Back action uses safe same-origin browser history when available and falls back to the Web App's main Dashboard URL.
+- Both Dashboard and standalone sidebars show the authenticated account's display name and role.
+- The user panel looks for a matching VJ name or TikTok username in the existing profile sheet and uses its TikTok profile image URL. If no profile image exists or the image request fails, it shows a generated initials avatar.
+- Profile lookup is limited to the authenticated user's own session and returns only that user's display name, username, role and public profile fields.
+- This source update has not been tested or deployed against the live Apps Script project.
+
+## Dashboard identity, clock and rendering (2026-11-02)
+
+- The Dashboard now renders the signed-in name and role as soon as the session is validated, then loads the account's TikTok profile image. Profile matching checks the display name, username and TikTok ID against the existing VJ profile sheet; unmatched/failed images use an initials avatar.
+- Added a live Bangkok date/time clock to Dashboard and report sidebars, formatted using the selected Thai, English or Chinese locale.
+- Cached the VJ profile lookup for five minutes and extended the monthly data response cache from 20 to 60 seconds. App writes continue to invalidate monthly data cache entries; direct spreadsheet edits may take up to one minute to appear.
+- Added lazy image loading and one-shot avatar fallback handlers on profile-heavy tables to reduce initial image requests and prevent repeated image error loops.
+- No live performance benchmark is available, so a 100% loading-speed improvement is not claimed. Gains depend on sheet size, cache hits and external TikTok avatar service response time.
+
+## KPI read, performance and security follow-up (2026-11-02)
+
+- Confirmed the live `KPI_Targets` tab is readable and contains 100 data rows: 48 for September 2026, 52 for October 2026 and one blank target value. The read was read-only; the spreadsheet was not modified.
+- The KPI Dashboard now reads the target tab by header, caches the target rows and dashboard response for up to 60 seconds, and invalidates those entries after an in-app KPI save. Month/name matching is normalized when checking existing rows before save.
+- KPI Dashboard data and the direct admin target-map read now validate the server session. An empty monthly sheet returns the dashboard's normal empty response shape; invalid/system sheet names are rejected. KPI load errors are surfaced by the page.
+- The live deployment remains version 53. These local changes have not been deployed or measured in production.
+- High security finding remains: the Web App is configured to execute as its owner and be accessible to everyone. Several other server read functions and the JSON TV route still do not validate a session token, so client-side login is not sufficient to protect all spreadsheet data. Restricting these routes requires a complete client/server contract pass.
+- High security finding remains: some report pages build HTML from spreadsheet-derived names/teams without HTML escaping. Review those sinks before using untrusted sheet values.
+- Existing backend functions also contain duplicate public declarations and some catch blocks return detailed exception text. These require a broader compatibility-focused cleanup.
+
+See `ACE_SYSTEM_AUDIT.md` for the audit, issue evidence and handoff plan.
+
+
+## Security hardening review (2026-11-02)
+
+- Backend session validation now accepts only `ADMIN` and `SUPER_ADMIN`; existing Super Admin-only operations retain their explicit role check. Protected Apps Script RPC calls receive the current tab session token from the shared client bridge. TV remains an explicit public, read-only exception, and its JSON dashboard accepts only recognized monthly sheet names.
+- Direct `getDataFromSheet` RPC access now requires a valid session and only reads recognized monthly sheets. Sheet selector and profile/status helper RPCs are protected; their internal implementations use Apps Script private names ending in `_`. MC schedule and bonus reads require a session and restrict the requested data tab to monthly sheets.
+- Anonymous checks on 2026-11-02 returned HTTP 200 for both the public `KPI_Targets` CSV export and monthly tab CSV export. Sheet sharing therefore still exposes these tabs independently of app login. Access cannot be closed from source code; change the Sheet/Drive sharing audience and verify deployment access in Google UI/API.
+- XSS escaping was added to Daily, MC, TV, VJ Bonus tables and backend error strings. This is not a complete sink-by-sink audit of the large Dashboard page; do not treat XSS review as complete until every dynamic HTML sink is reviewed with hostile sheet values.
+- Live anonymous response samples (3 each): deployment page 1.278–1.860 s (median 1.791 s, 588,981 bytes); selected month CSV 0.856–1.035 s (median 0.922 s, 5,262 bytes). These measure HTTP response paths, not server execution time for each `google.script.run` endpoint. No “50%/100% faster” claim is supported.
+- `clasp deployments` could not read the project because the saved Google OAuth grant returned `invalid_grant` / `invalid_rapt`. No deployment version can be confirmed or updated until Google authorization is restored.
+- Business calculation formulas were not intentionally changed. Source duplicate declarations remain in the legacy backend; no duplicate formula implementation was merged without comparison against live workbook results.

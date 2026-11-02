@@ -471,6 +471,7 @@
 
     function switchLanguage(lang) {
       currentLang = lang;
+      if (window.setACECurrentLanguage_) window.setACECurrentLanguage_(lang);
       const dict = dictionary[lang];
 
       document.getElementById('ui-title').innerText = dict.title;
@@ -538,7 +539,7 @@
       const mcFilter = document.getElementById('filter-mc-name').value;
       const teamFilter = document.getElementById('filter-team-name').value;
 
-      google.script.run.withSuccessHandler(renderSchedules).getMCSchedules('', '', mcFilter, teamFilter, '');
+      requireACELoginOnStartup_(sessionToken => google.script.run.withSuccessHandler(renderSchedules).getMCSchedules('', '', mcFilter, teamFilter, '', sessionToken));
     }
 
     function renderSchedules(res) {
@@ -557,12 +558,12 @@
 
         html += `
           <tr class="hover:bg-slate-800/50 transition">
-            <td class="p-3.5 font-bold text-amber-300">${item.date}</td>
-            <td class="p-3.5 font-black text-white">${item.mcName}</td>
-            <td class="p-3.5 font-semibold text-indigo-300">${item.effectiveTeam}</td>
-            <td class="p-3.5 text-slate-400 font-medium">${item.shiftTime}</td>
+            <td class="p-3.5 font-bold text-amber-300">${window.aceEscapeHtml_(item.date)}</td>
+            <td class="p-3.5 font-black text-white"><img src="${window.aceEscapeHtml_(item.avatarUrl || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(item.mcName || 'MC') + '&background=4f46e5&color=fff'))}" data-vj-name="${window.aceEscapeHtml_(item.mcName)}" alt="" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name='+encodeURIComponent(this.dataset.vjName||'MC')+'&background=4f46e5&color=fff'" class="inline-block w-8 h-8 rounded-full object-cover mr-2 align-middle">${window.aceEscapeHtml_(item.mcName)} ${item.tiktokId ? '<small>@'+window.aceEscapeHtml_(item.tiktokId)+'</small>' : ''}</td>
+            <td class="p-3.5 font-semibold text-indigo-300">${window.aceEscapeHtml_(item.effectiveTeam)}</td>
+            <td class="p-3.5 text-slate-400 font-medium">${window.aceEscapeHtml_(item.shiftTime)}</td>
             <td class="p-3.5">${badge}</td>
-            <td class="p-3.5 text-slate-400 italic">${item.notes || '-'}</td>
+            <td class="p-3.5 text-slate-400 italic">${window.aceEscapeHtml_(item.notes || '-')}</td>
           </tr>
         `;
       });
@@ -571,7 +572,7 @@
 
     function fetchBonusReport() {
       const selectedDay = document.getElementById('bonus-select-day').value;
-      google.script.run.withSuccessHandler(renderBonusReport).getMCBonusReport('', selectedDay);
+      requireACELoginOnStartup_(sessionToken => google.script.run.withSuccessHandler(renderBonusReport).getMCBonusReport('', selectedDay, sessionToken));
     }
 
     function renderBonusReport(res) {
@@ -597,13 +598,13 @@
 
         html += `
           <tr class="hover:bg-slate-800/50 transition">
-            <td class="p-3 font-bold text-white">${item.mcName}</td>
-            <td class="p-3 font-semibold text-indigo-300">${item.effectiveTeam}</td>
+            <td class="p-3 font-bold text-white"><img src="${window.aceEscapeHtml_(item.avatarUrl || ('https://ui-avatars.com/api/?name=' + encodeURIComponent(item.mcName || 'MC') + '&background=4f46e5&color=fff'))}" data-vj-name="${window.aceEscapeHtml_(item.mcName)}" alt="" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='https://ui-avatars.com/api/?name='+encodeURIComponent(this.dataset.vjName||'MC')+'&background=4f46e5&color=fff'" class="inline-block w-8 h-8 rounded-full object-cover mr-2 align-middle">${window.aceEscapeHtml_(item.mcName)} ${item.tiktokId ? '<small>@'+window.aceEscapeHtml_(item.tiktokId)+'</small>' : ''}</td>
+            <td class="p-3 font-semibold text-indigo-300">${window.aceEscapeHtml_(item.effectiveTeam)}</td>
             <td class="p-3">${badge}</td>
-            <td class="p-3 text-right font-black text-amber-300">${item.teamScore.toLocaleString()} 💎</td>
-            <td class="p-3 font-bold text-slate-300">${item.bonusTier}</td>
-            <td class="p-3 text-right font-black text-emerald-400 text-sm">฿${item.bonusAmount.toLocaleString()}</td>
-            <td class="p-3 text-right text-slate-400">${item.nextTierDiff.toLocaleString()} 💎</td>
+            <td class="p-3 text-right font-black text-amber-300">${window.aceEscapeHtml_(item.teamScore.toLocaleString())} 💎</td>
+            <td class="p-3 font-bold text-slate-300">${window.aceEscapeHtml_(item.bonusTier)}</td>
+            <td class="p-3 text-right font-black text-emerald-400 text-sm">฿${window.aceEscapeHtml_(item.bonusAmount.toLocaleString())}</td>
+            <td class="p-3 text-right text-slate-400">${window.aceEscapeHtml_(item.nextTierDiff.toLocaleString())} 💎</td>
           </tr>
         `;
 
@@ -809,7 +810,7 @@ function loadMonthlySummary(selectedMonth) {
 
       tableHtml += `
         <tr class="border-b border-slate-800 text-xs">
-          <td class="py-3 px-4 font-bold text-white">${item.mcName}</td>
+          <td class="py-3 px-4 font-bold text-white">${window.aceEscapeHtml_(item.mcName)}</td>
           <td class="py-3 px-4 text-indigo-400 font-semibold">${item.team}</td>
           <td class="py-3 px-4 text-slate-400">${item.type} (${item.workDays} วัน)</td>
           <td class="py-3 px-4 text-amber-400 font-bold">${item.totalDiamond.toLocaleString()} 💎</td>
@@ -855,7 +856,7 @@ function renderMonthlyTotalCard(mcMonthlyData) {
   const rows = mcMonthlyData.map(item => `
     <tr class="hover:bg-slate-200/80 transition-colors">
       <td class="py-3 px-4">
-        <div class="font-black text-slate-900 text-sm leading-tight">${item.mcName}</div>
+        <div class="font-black text-slate-900 text-sm leading-tight">${window.aceEscapeHtml_(item.mcName)}</div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">ประจำ: ${item.team}</div>
       </td>
       <td class="py-3 px-4 text-center font-bold text-slate-400 text-xs">
@@ -896,7 +897,7 @@ function renderAllMCTotalCard(dataList) {
   tbody.innerHTML = dataList.map(item => `
     <tr class="hover:bg-slate-200 transition-colors">
       <td class="py-3 px-4">
-        <div class="font-black text-slate-900 text-sm leading-tight">${item.mcName}</div>
+        <div class="font-black text-slate-900 text-sm leading-tight">${window.aceEscapeHtml_(item.mcName)}</div>
         <div class="text-[10px] text-slate-500 font-medium mt-0.5">ประจำ: ${item.team}</div>
       </td>
       <td class="py-3 px-4 text-center font-bold text-slate-400 text-xs">
@@ -952,32 +953,11 @@ function removeDuplicateMCs(dataList) {
   </script>
 <script>
 function withACEAdminSession_(onReady, onError) {
-  const fail = onError || function(message) { alert(message); };
-  if (!(typeof google !== 'undefined' && google.script && google.script.run)) {
-    fail('ต้องเปิดหน้านี้จาก Apps Script Web App');
+  if (typeof window.requireACELoginOnStartup_ === 'function') {
+    window.requireACELoginOnStartup_(onReady, onError);
     return;
   }
-  let stored = '';
-  try { stored = localStorage.getItem('ACE_ADMIN_SESSION_TOKEN') || ''; } catch (error) {}
-  const promptForLogin = function() {
-    const username = window.prompt('ชื่อผู้ใช้ Admin');
-    if (username === null) return fail('ยกเลิกการเข้าสู่ระบบ');
-    const passcode = window.prompt('รหัสผ่าน Admin');
-    if (passcode === null) return fail('ยกเลิกการเข้าสู่ระบบ');
-    google.script.run.withSuccessHandler(function(result) {
-      if (!result || !result.success || !result.token) return fail((result && result.error) || 'เข้าสู่ระบบไม่สำเร็จ');
-      try { localStorage.setItem('ACE_ADMIN_SESSION_TOKEN', result.token); } catch (error) {}
-      onReady(result.token);
-    }).withFailureHandler(function() { fail('ไม่สามารถตรวจสอบบัญชีได้'); }).verifyAdminAccess(passcode, username);
-  };
-  if (!stored) return promptForLogin();
-  google.script.run.withSuccessHandler(function(result) {
-    if (result && result.success) onReady(stored);
-    else {
-      try { localStorage.removeItem('ACE_ADMIN_SESSION_TOKEN'); } catch (error) {}
-      promptForLogin();
-    }
-  }).withFailureHandler(function() { promptForLogin(); }).validateAdminSession(stored);
+  if (typeof onError === 'function') onError('ไม่พบหน้าต่างเข้าสู่ระบบ กรุณาโหลดหน้าใหม่');
 }
 </script>
 </body>

@@ -46,6 +46,7 @@
         <button @click="openConfigModal" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-sm font-medium px-5 py-2.5 rounded-xl shadow-lg transition flex items-center gap-2">
           <i class="fa-solid fa-sliders"></i> ตั้งค่า KPI ประจำเดือน
         </button>
+        <select id="lang-select" onchange="setKPIPageLanguage(this.value)" aria-label="Language" class="bg-slate-800 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-2.5"><option value="th">🇹🇭 ไทย</option><option value="zh">🇨🇳 中文</option></select>
       </div>
     </header>
 
@@ -153,9 +154,10 @@
                 <tr class="hover:bg-slate-800/40 transition">
                   <!-- Profile Column -->
                   <td class="py-3 px-4 flex items-center gap-3">
-                    <img :src="vj.avatar" class="w-9 h-9 rounded-full object-cover border border-slate-700 shadow" alt="avatar">
+                    <img :src="vj.avatar" :alt="vj.name" :data-vj-name="vj.name" @error="$event.target.onerror = null; $event.target.src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(vj.name) + '&background=4f46e5&color=fff&bold=true'" loading="lazy" decoding="async" class="w-9 h-9 rounded-full object-cover border border-slate-700 shadow">
                     <div>
                       <div class="font-bold text-white text-sm">{{ vj.name }}</div>
+                      <a v-if="vj.tiktokId && vj.tiktokUrl" :href="vj.tiktokUrl" target="_blank" rel="noopener noreferrer" class="text-[10px] text-sky-400 hover:underline">@{{ vj.tiktokId }}</a>
                       <div class="text-[11px] text-slate-400 flex items-center gap-1">
                         <span class="inline-block w-2 h-2 rounded-full bg-indigo-400"></span> {{ vj.team }}
                       </div>
@@ -301,6 +303,29 @@
   </div>
 
   <script>
+    const KPI_PAGE_ZH = {
+      'ระบบบริหารจัดการและอัปเดต KPI VJ & Team':'VJ 与团队 KPI 管理与更新系统','อัปเดตล่าสุด:':'最近更新：','กำลังโหลด...':'正在加载...','ตั้งค่า KPI ประจำเดือน':'设置本月 KPI','กำลังดึงข้อมูล Real-time แดชบอร์ด...':'正在获取实时仪表板数据...',
+      'เป้าหมายรวม VJ ทั้งหมด':'VJ 总目标','คน':'人','ยอดเพชรรวมสะสมปัจจุบัน':'当前累计 Diamond','ยอดเพชรที่ยังขาดอีกจะถึงเป้า':'距离目标还差 Diamond','รายละเอียด KPI VJ รายบุคคล':'VJ 个人 KPI 明细','ค้นหาชื่อ VJ หรือ รหัส...':'搜索 VJ 姓名或编号...','ทุกสังกัด / ทุกทีม':'所有团队','โปรไฟล์ VJ & ทีม':'VJ 资料与团队','เป้าหมาย (Target)':'目标','ยอดปัจจุบัน (Current)':'当前业绩','ความสำเร็จ (%)':'完成率 (%)','ขาดอีก (Deficit)':'差额','ยอดรายวัน (1-31)':'每日业绩 (1-31)','ซ่อน':'收起','ดู 31 วัน':'查看 31 天','ยอดสะสมเพชรรายวันประจำเดือน (วันที่ 1 ถึง 31)':'本月每日 Diamond 累计 (1 至 31 日)','วันที่':'日期',
+      'เลือกโหมดการกระจาย KPI':'选择 KPI 分配模式','กระจาย KPI อัตโนมัติ (Auto)':'自动分配 KPI','กำหนด KPI เองรายบุคคล (Manual)':'手动设置个人 KPI','เลือกทีม / สังกัด':'选择团队','เลือก VJ ทุกทีมทั้งแผ่นงาน':'选择工作表中的所有 VJ','เป้าหมายรวมของทีม (Total Team Target Diamond)':'团队总目标 Diamond','เช่น 500000':'例如 500000','พรีวิวการกระจาย KPI':'KPI 分配预览','จำนวน VJ ในทีม:':'团队 VJ 人数：','ระบบจะเฉลี่ย KPI ให้ VJ คนละประมาณ:':'系统将为每位 VJ 平均分配约：','กรอกเป้าหมาย KPI แยกตามรายชื่อ VJ แต่ละคน:':'为每位 VJ 分别填写 KPI 目标：','ยกเลิก':'取消','บันทึกข้อมูล':'保存数据','ต้องเปิดหน้านี้ผ่าน Apps Script Web App เพื่อโหลดข้อมูลจริง':'请通过 Apps Script Web App 打开此页面以加载实时数据','เกิดข้อผิดพลาด:':'发生错误：','ไม่สามารถบันทึกได้:':'无法保存：','ต้องเปิดหน้านี้ผ่าน Apps Script Web App เพื่อบันทึกข้อมูล':'请通过 Apps Script Web App 打开此页面以保存数据'
+    };
+    let kpiPageLanguage = 'th';
+    function setKPIPageLanguage(lang) {
+      kpiPageLanguage = lang === 'zh' ? 'zh' : 'th';
+      if (window.setACECurrentLanguage_) window.setACECurrentLanguage_(lang);
+      const isZh = lang === 'zh';
+      const dict = isZh ? KPI_PAGE_ZH : Object.fromEntries(Object.entries(KPI_PAGE_ZH).map(([th, zh]) => [zh, th]));
+      const walker = document.createTreeWalker(document.querySelector('#app'), NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode);
+      nodes.forEach(node => {
+        let value = node.nodeValue;
+        Object.keys(dict).sort((a,b)=>b.length-a.length).forEach(source => { value = value.split(source).join(dict[source]); });
+        if (value !== node.nodeValue) node.nodeValue = value;
+      });
+      const search = document.querySelector('input[placeholder*="VJ"],input[placeholder*="搜索"]');
+      if (search) search.placeholder = isZh ? '搜索 VJ 姓名或编号...' : 'ค้นหาชื่อ VJ หรือ รหัส...';
+      document.documentElement.lang = isZh ? 'zh-CN' : 'th';
+    }
     const { createApp } = Vue;
 
     createApp({
@@ -358,23 +383,27 @@
         fetchData() {
           this.loading = true;
           if (typeof google !== 'undefined' && google.script && google.script.run) {
-            google.script.run
-              .withSuccessHandler(this.handleDataLoaded)
-              .withFailureHandler(this.handleError)
-              .getKPIDashboardData(this.selectedSheet);
+            withACEAdminSession_(token => {
+              google.script.run
+                .withSuccessHandler(this.handleDataLoaded)
+                .withFailureHandler(this.handleError)
+                .getKPIDashboardData(this.selectedSheet, token);
+            }, error => this.handleError(new Error(String(error || 'กรุณาเข้าสู่ระบบใหม่ก่อนอ่านข้อมูล KPI'))));
           } else {
             this.handleError(new Error('ต้องเปิดหน้านี้ผ่าน Apps Script Web App เพื่อโหลดข้อมูลจริง'));
           }
         },
         handleDataLoaded(res) {
           this.loading = false;
-          if (res && res.success) {
-            this.selectedSheet = res.sheetName;
-            this.monthList = res.monthList || [res.sheetName];
-            this.executiveSummary = res.executiveSummary;
-            this.vjList = res.vjList;
-            this.lastUpdated = res.lastUpdated;
+          if (!res || !res.success) {
+            this.handleError(new Error(res && res.error ? res.error : 'ไม่สามารถโหลดข้อมูล KPI ได้'));
+            return;
           }
+          this.selectedSheet = res.sheetName || this.selectedSheet;
+          this.monthList = Array.isArray(res.monthList) ? res.monthList : (res.sheetName ? [res.sheetName] : []);
+          this.executiveSummary = res.executiveSummary || { totalTarget: 0, totalCurrent: 0, progressPct: 0, remainingDeficit: 0, totalVJs: 0 };
+          this.vjList = Array.isArray(res.vjList) ? res.vjList : [];
+          this.lastUpdated = res.lastUpdated || '';
         },
         handleError(err) {
           this.loading = false;
@@ -423,38 +452,21 @@
         }
       },
       mounted() {
+        setKPIPageLanguage(document.getElementById('lang-select').value);
+        new MutationObserver(() => {
+          if (kpiPageLanguage === 'zh') setKPIPageLanguage('zh');
+        }).observe(document.querySelector('#app'), { childList: true, subtree: true, characterData: true });
         requireACELoginOnStartup_(() => this.fetchData());
       }
     }).mount('#app');
   </script>
 <script>
 function withACEAdminSession_(onReady, onError) {
-  const fail = onError || function(message) { alert(message); };
-  if (!(typeof google !== 'undefined' && google.script && google.script.run)) {
-    fail('ต้องเปิดหน้านี้จาก Apps Script Web App');
+  if (typeof window.requireACELoginOnStartup_ === 'function') {
+    window.requireACELoginOnStartup_(onReady, onError);
     return;
   }
-  let stored = '';
-  try { stored = localStorage.getItem('ACE_ADMIN_SESSION_TOKEN') || ''; } catch (error) {}
-  const promptForLogin = function() {
-    const username = window.prompt('ชื่อผู้ใช้ Admin');
-    if (username === null) return fail('ยกเลิกการเข้าสู่ระบบ');
-    const passcode = window.prompt('รหัสผ่าน Admin');
-    if (passcode === null) return fail('ยกเลิกการเข้าสู่ระบบ');
-    google.script.run.withSuccessHandler(function(result) {
-      if (!result || !result.success || !result.token) return fail((result && result.error) || 'เข้าสู่ระบบไม่สำเร็จ');
-      try { localStorage.setItem('ACE_ADMIN_SESSION_TOKEN', result.token); } catch (error) {}
-      onReady(result.token);
-    }).withFailureHandler(function() { fail('ไม่สามารถตรวจสอบบัญชีได้'); }).verifyAdminAccess(passcode, username);
-  };
-  if (!stored) return promptForLogin();
-  google.script.run.withSuccessHandler(function(result) {
-    if (result && result.success) onReady(stored);
-    else {
-      try { localStorage.removeItem('ACE_ADMIN_SESSION_TOKEN'); } catch (error) {}
-      promptForLogin();
-    }
-  }).withFailureHandler(function() { promptForLogin(); }).validateAdminSession(stored);
+  if (typeof onError === 'function') onError('ไม่พบหน้าต่างเข้าสู่ระบบ กรุณาโหลดหน้าใหม่');
 }
 </script>
 </body>

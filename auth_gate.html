@@ -1,19 +1,152 @@
 <script>
 (function () {
   const SESSION_KEY = 'ACE_ADMIN_SESSION_TOKEN';
+  // The tab keeps only the opaque token; the authoritative session and expiry
+  // are stored and checked in Apps Script CacheService.
+  try { localStorage.removeItem(SESSION_KEY); } catch (error) {}
   let authenticated = false;
   let validationStarted = false;
   let currentToken = '';
+  let currentRole = 'GUEST';
   let gateElement = null;
   let statusElement = null;
   let usernameElement = null;
   let passcodeElement = null;
   let submitElement = null;
   const waitingCallbacks = [];
+  let sharedSidebar = null;
+
+  function ensureSidebar_() {
+    if (window.ACE_STATUS_ONLY_) return;
+    if (!document.body || sharedSidebar) return;
+    document.body.classList.add('ace-sidebar-active');
+    const backdrop = document.createElement('div');
+    backdrop.id = 'ace-sidebar-backdrop';
+    backdrop.addEventListener('click', () => toggleSidebar_(false));
+    document.body.appendChild(backdrop);
+
+    const menuButton = document.createElement('button');
+    menuButton.id = 'ace-menu-mobile-button';
+    menuButton.type = 'button';
+    menuButton.setAttribute('aria-label', 'เปิดเมนู');
+    menuButton.textContent = '☰ เมนู';
+    menuButton.addEventListener('click', () => toggleSidebar_());
+    document.body.appendChild(menuButton);
+
+    sharedSidebar = document.createElement('aside');
+    sharedSidebar.id = 'ace-shared-sidebar';
+    sharedSidebar.setAttribute('aria-label', 'เมนูหลัก ACE Tracking');
+    sharedSidebar.innerHTML = '<div class="ace-sidebar-brand">ACE TRACKING<span>เมนูระบบ</span><button type="button" aria-label="ย่อหรือขยายเมนู" title="ย่อหรือขยายเมนู" onclick="window.toggleACESidebar_()">‹</button></div>' +
+      '<div class="ace-current-user"><img id="ace-current-user-avatar" alt="Avatar ผู้ใช้"><div class="ace-current-user-copy"><strong id="ace-current-user-name">ยังไม่ได้เข้าสู่ระบบ</strong><span id="ace-current-user-role">GUEST</span></div></div>' +
+      '<div class="ace-system-clock"><span class="ace-system-clock-icon">◷</span><div><strong id="ace-current-clock-time">--:--:--</strong><span id="ace-current-clock-date">กำลังโหลดเวลา</span></div></div>' +
+      '<div class="ace-menu-group">หน้าหลัก</div>' +
+      '<a class="ace-menu-link" data-ace-page="" href="#" target="_top">🏠 Main Dashboard</a>' +
+      '<a class="ace-menu-link" data-ace-page="tv" href="#" target="_top">📺 TV Leaderboard</a>' +
+      '<div class="ace-menu-group">รายงาน</div>' +
+      '<a class="ace-menu-link" data-ace-page="daily_summary" href="#" target="_top">📅 สรุปรายวัน</a>' +
+      '<a class="ace-menu-link" data-ace-page="weekly" href="#" target="_top">🗓️ สรุปรายสัปดาห์</a>' +
+      '<a class="ace-menu-link" data-ace-page="kpi" href="#" target="_top">⚡ KPI Dashboard</a>' +
+      '<a class="ace-menu-link" data-ace-page="kpi_vj" href="#" target="_top">📊 KPI VJ / Team</a>' +
+      '<a class="ace-menu-link" data-ace-page="vjbonus" href="#" target="_top">💎 Bonus VJ</a>' +
+      '<a class="ace-menu-link" data-ace-page="mc_w" href="#" target="_top">🎤 ตารางงาน / Bonus MC</a>' +
+      '<button class="ace-menu-link ace-back-link" type="button" onclick="window.goBackACEPage_()">↩ ย้อนกลับ</button>' +
+      '<button id="ace-shared-logout" class="ace-menu-link ace-shared-logout is-hidden" type="button" onclick="window.logoutACEAdminSession_()">🔒 ออกจากระบบ</button>';
+    document.body.appendChild(sharedSidebar);
+    const routeRunner = runWith_(url => {
+      if (!url) return;
+      window.ACE_WEB_APP_URL = String(url).split('?')[0];
+      sharedSidebar.querySelectorAll('a[data-ace-page]').forEach(link => {
+        const page = link.getAttribute('data-ace-page');
+        link.href = window.ACE_WEB_APP_URL + (page ? '?page=' + encodeURIComponent(page) : '');
+      });
+    }, () => {});
+    if (routeRunner) routeRunner.getACEWebAppUrl();
+  }
+
+  function toggleSidebar_(forceOpen) {
+    if (!sharedSidebar) return;
+    if (window.matchMedia('(min-width: 1024px)').matches) {
+      if (typeof forceOpen === 'boolean') return;
+      document.body.classList.toggle('ace-sidebar-collapsed');
+      const toggle = sharedSidebar.querySelector('.ace-sidebar-brand button');
+      if (toggle) toggle.textContent = document.body.classList.contains('ace-sidebar-collapsed') ? '›' : '‹';
+      return;
+    }
+    const backdrop = document.getElementById('ace-sidebar-backdrop');
+    const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : !sharedSidebar.classList.contains('is-open');
+    sharedSidebar.classList.toggle('is-open', shouldOpen);
+    if (backdrop) backdrop.classList.toggle('is-open', shouldOpen);
+  }
+  window.toggleACESidebar_ = function () { toggleSidebar_(); };
+  window.goBackACEPage_ = function () {
+    try {
+      const previousUrl = document.referrer ? new URL(document.referrer) : null;
+      if (window.history.length > 1 && previousUrl && previousUrl.origin === window.location.origin) {
+        window.history.back();
+        return;
+      }
+    } catch (error) {}
+    const base = String(window.ACE_WEB_APP_URL || '').split('?')[0];
+    if (base) window.location.assign(base);
+    else {
+      const dashboardLink = document.querySelector('#ace-shared-sidebar a[data-ace-page=""]');
+      if (dashboardLink && dashboardLink.href && dashboardLink.href !== window.location.href) window.location.assign(dashboardLink.href);
+      else window.location.reload();
+    }
+  };
 
   const style = document.createElement('style');
   style.textContent = `
     body.ace-auth-pending > :not(#ace-auth-gate) { visibility: hidden !important; }
+    body.ace-sidebar-active { padding-left: 16rem !important; transition:padding-left .2s ease; }
+    #ace-shared-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 70; width: 16rem; overflow-y: auto; background: rgba(2,6,23,.97); color: #e2e8f0; border-right: 1px solid rgba(51,65,85,.8); box-shadow: 0 20px 50px rgba(0,0,0,.35); font-family: Arial,sans-serif; transition: transform .2s ease; }
+    .ace-sidebar-brand { display:flex; align-items:center; gap:8px; padding:22px 16px; border-bottom:1px solid #1e293b; color:#fff; font-size:16px; font-weight:800; }
+    .ace-sidebar-brand span { display:block; margin-top:4px; color:#64748b; font-size:10px; font-weight:500; }
+    .ace-sidebar-brand button { margin-left:auto; border:0; border-radius:8px; background:#1e293b; color:#fff; padding:7px 10px; cursor:pointer; }
+    #ace-shared-sidebar .ace-menu-link { display:flex; align-items:center; gap:12px; margin:4px 12px; padding:11px 12px; border-radius:11px; color:#cbd5e1; text-decoration:none; font-size:13px; font-weight:600; }
+    #ace-shared-sidebar .ace-menu-link:hover { background:#1e293b; color:#fff; }
+    #ace-shared-sidebar .ace-current-user { display:flex; align-items:center; gap:11px; margin:12px; padding:11px; border:1px solid #1e293b; border-radius:13px; background:#0f172a; }
+    #ace-shared-sidebar .ace-current-user img { width:42px; height:42px; flex:none; border-radius:50%; object-fit:cover; background:#334155; }
+    #ace-shared-sidebar .ace-current-user-copy { min-width:0; }
+    #ace-shared-sidebar .ace-current-user strong,#ace-shared-sidebar .ace-current-user span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #ace-shared-sidebar .ace-current-user strong { color:#f8fafc; font-size:12px; }
+    #ace-shared-sidebar .ace-current-user span { margin-top:4px; color:#94a3b8; font-size:10px; }
+    #ace-shared-sidebar .ace-system-clock { display:flex; align-items:center; gap:10px; margin:0 12px 12px; padding:10px 12px; border-radius:12px; background:linear-gradient(120deg,rgba(79,70,229,.16),rgba(14,165,233,.08)); border:1px solid rgba(99,102,241,.2); }
+    #ace-shared-sidebar .ace-system-clock-icon { color:#a5b4fc; font-size:21px; line-height:1; }
+    #ace-shared-sidebar .ace-system-clock strong,#ace-shared-sidebar .ace-system-clock div span { display:block; }
+    #ace-shared-sidebar .ace-system-clock strong { color:#f8fafc; font:700 15px ui-monospace,SFMono-Regular,Consolas,monospace; letter-spacing:.04em; }
+    #ace-shared-sidebar .ace-system-clock div span { margin-top:3px; color:#94a3b8; font-size:10px; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-system-clock { justify-content:center; padding:10px 4px; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-system-clock div { display:none; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-current-user { justify-content:center; padding:6px; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-current-user-copy { display:none; }
+    #ace-shared-sidebar button.ace-menu-link { width:calc(100% - 24px); border:0; background:transparent; text-align:left; cursor:pointer; font-family:inherit; }
+    #ace-shared-sidebar .ace-shared-logout { width:calc(100% - 24px); margin-top:18px; border:1px solid #334155; background:transparent; text-align:left; cursor:pointer; font-family:inherit; }
+    #ace-shared-sidebar .is-hidden { display:none !important; }
+    #ace-shared-sidebar .ace-menu-group { padding:18px 24px 5px; color:#64748b; font-size:10px; text-transform:uppercase; letter-spacing:.16em; font-weight:bold; }
+    #ace-menu-mobile-button { display:none; }
+    #ace-sidebar-backdrop { display:none; }
+    body.ace-sidebar-active.ace-sidebar-collapsed { padding-left:4.5rem !important; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar { width:4.5rem; overflow-x:hidden; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-sidebar-brand { padding:14px 8px; justify-content:center; font-size:0; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-sidebar-brand span,
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-menu-group { display:none; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-sidebar-brand button { margin:0; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-menu-link { justify-content:center; margin:4px 6px; padding:12px 4px; overflow:hidden; font-size:0; white-space:nowrap; }
+    body.ace-sidebar-collapsed #ace-shared-sidebar .ace-menu-link::first-letter { font-size:19px; }
+    @media (max-width: 1023px) {
+      body.ace-sidebar-active { padding-left:0 !important; }
+      body.ace-sidebar-active.ace-sidebar-collapsed { padding-left:0 !important; }
+      body.ace-sidebar-collapsed #ace-shared-sidebar { width:16rem; }
+      body.ace-sidebar-collapsed #ace-shared-sidebar .ace-sidebar-brand { justify-content:flex-start; padding:22px 16px; font-size:16px; }
+      body.ace-sidebar-collapsed #ace-shared-sidebar .ace-sidebar-brand span,
+      body.ace-sidebar-collapsed #ace-shared-sidebar .ace-menu-group { display:block; }
+      body.ace-sidebar-collapsed #ace-shared-sidebar .ace-menu-link { justify-content:flex-start; margin:4px 12px; padding:11px 12px; font-size:13px; white-space:normal; }
+      #ace-shared-sidebar { transform:translateX(-100%); }
+      #ace-shared-sidebar.is-open { transform:translateX(0); }
+      #ace-menu-mobile-button { display:block; position:fixed; top:12px; left:12px; z-index:55; border:1px solid #334155; border-radius:10px; background:#0f172a; color:#fff; padding:10px 12px; box-shadow:0 6px 20px rgba(0,0,0,.25); }
+      #ace-sidebar-backdrop.is-open { display:block; position:fixed; inset:0; z-index:60; background:rgba(2,6,23,.68); }
+    }
     #ace-auth-gate { position: fixed; inset: 0; z-index: 2147483000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15, 23, 42, .88); backdrop-filter: blur(8px); font-family: Arial, sans-serif; }
     #ace-auth-gate .ace-auth-card { box-sizing: border-box; width: min(100%, 400px); padding: 30px; border-radius: 22px; background: #fff; box-shadow: 0 24px 80px rgba(0,0,0,.35); color: #0f172a; }
     #ace-auth-gate h1 { margin: 0 0 8px; font-size: 22px; text-align: center; }
@@ -57,10 +190,134 @@
     statusElement.textContent = message || '';
   }
 
-  function completeLogin_(token) {
+  function renderCurrentUser_(user) {
+    const data = user || {};
+    const name = String(data.displayName || data.username || 'Admin');
+    const role = String(data.role || currentRole || 'ADMIN').toUpperCase();
+    const fallback = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(name) + '&background=4f46e5&color=fff&bold=true';
+    const avatarUrl = String(data.profilePic || '').trim() || fallback;
+    ['ace-current-user-avatar', 'ace-dashboard-current-user-avatar'].forEach(id => {
+      const img = document.getElementById(id);
+      if (img) { img.onerror = function () { this.onerror = null; this.src = fallback; }; img.src = avatarUrl; img.alt = 'รูปโปรไฟล์ ' + name; }
+    });
+    ['ace-current-user-name', 'ace-dashboard-current-user-name'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = name; });
+    const identity = role + (data.tiktokId ? ' · @' + String(data.tiktokId).replace(/^@/, '') : '');
+    ['ace-current-user-role', 'ace-dashboard-current-user-role'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = identity; });
+  }
+
+  const clockFormatters_ = Object.create(null);
+  function updateSystemClock_() {
+    const lang = String(window.ACE_CURRENT_LANG || 'th').toLowerCase();
+    const locale = lang === 'zh' ? 'zh-CN' : lang === 'en' ? 'en-GB' : 'th-TH';
+    const now = new Date();
+    if (!clockFormatters_[locale]) clockFormatters_[locale] = {
+      time: new Intl.DateTimeFormat(locale, { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }),
+      date: new Intl.DateTimeFormat(locale, { timeZone: 'Asia/Bangkok', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    };
+    const time = clockFormatters_[locale].time.format(now);
+    const date = clockFormatters_[locale].date.format(now);
+    ['ace-current-clock-time', 'ace-dashboard-clock-time'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = time; });
+    ['ace-current-clock-date', 'ace-dashboard-clock-date'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = date + ' · Bangkok'; });
+  }
+  let clockTimer_ = null;
+  function startSystemClock_() {
+    updateSystemClock_();
+    if (clockTimer_) window.clearInterval(clockTimer_);
+    clockTimer_ = window.setInterval(updateSystemClock_, 1000);
+  }
+
+  function loadCurrentUser_(token) {
+    const runner = runWith_(user => { if (user && user.success) { currentRole = String(user.role || currentRole).toUpperCase(); renderCurrentUser_(user); } }, () => {});
+    if (runner) runner.getACECurrentUserProfile(token);
+  }
+
+  let vjIdentityMap_ = null;
+  let vjIdentityObserver_ = null;
+  let vjIdentityStyleAdded_ = false;
+  function normalizeVJIdentityName_(value) {
+    return String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  }
+  function addVJIdentityBadgeStyle_() {
+    if (vjIdentityStyleAdded_ || !document.head) return;
+    const style = document.createElement('style');
+    style.textContent = '.ace-vj-tiktok-id{display:inline-block;margin-left:.35em;color:#38bdf8!important;font-size:.82em;font-weight:600;text-decoration:none;white-space:nowrap}.ace-vj-tiktok-id:hover{text-decoration:underline;color:#7dd3fc!important}';
+    document.head.appendChild(style);
+    vjIdentityStyleAdded_ = true;
+  }
+  function decorateVJIdentityText_(root) {
+    if (!vjIdentityMap_ || !root) return;
+    const ownerDocument = root.ownerDocument || document;
+    const walker = ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let node;
+    while ((node = walker.nextNode())) nodes.push(node);
+    nodes.forEach(textNode => {
+      const parent = textNode.parentElement;
+      if (!parent || !textNode.nodeValue.trim() || parent.closest('a,button,select,option,input,textarea,script,style,[contenteditable="true"],[data-ace-vj-identity]')) return;
+      const profile = vjIdentityMap_[normalizeVJIdentityName_(textNode.nodeValue)];
+      if (!profile || !profile.tiktokId) return;
+      parent.setAttribute('data-ace-vj-identity', 'true');
+      const link = ownerDocument.createElement('a');
+      link.className = 'ace-vj-tiktok-id';
+      link.href = 'https://www.tiktok.com/@' + encodeURIComponent(profile.tiktokId);
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.setAttribute('aria-label', 'TikTok ID @' + profile.tiktokId);
+      link.textContent = '@' + profile.tiktokId;
+      textNode.parentNode.insertBefore(link, textNode.nextSibling);
+    });
+    const imageRoot = root.nodeType === Node.ELEMENT_NODE ? root : root.parentElement;
+    if (imageRoot && imageRoot.querySelectorAll) {
+      imageRoot.querySelectorAll('img[alt],img[title],img[data-vj-name],img[data-profile-name]').forEach(img => {
+        if (img.dataset.aceTikTokProfileApplied === 'true') return;
+        const name = img.getAttribute('data-vj-name') || img.getAttribute('data-profile-name') || img.getAttribute('alt') || img.getAttribute('title') || '';
+        const profile = vjIdentityMap_[normalizeVJIdentityName_(name)];
+        if (!profile || !profile.tiktokId) return;
+        img.dataset.aceTikTokProfileApplied = 'true';
+        img.dataset.tiktokId = profile.tiktokId;
+        if (profile.profilePic) {
+          const fallback = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(name || 'VJ') + '&background=4f46e5&color=fff&bold=true';
+          img.onerror = function () { this.onerror = null; this.src = fallback; };
+          img.src = profile.profilePic;
+        }
+      });
+    }
+  }
+  function startVJIdentityDecoration_(token) {
+    if (!(window.google && google.script && google.script.run)) return;
+    const runner = runWith_(result => {
+      if (!result || !result.success || !Array.isArray(result.profiles)) return;
+      vjIdentityMap_ = Object.create(null);
+      result.profiles.forEach(profile => {
+        const key = normalizeVJIdentityName_(profile && profile.name);
+        const tiktokId = String(profile && profile.tiktokId || '').replace(/^@/, '').trim();
+        if (key && tiktokId) vjIdentityMap_[key] = { tiktokId: tiktokId, profilePic: String(profile.profilePic || '') };
+      });
+      addVJIdentityBadgeStyle_();
+      if (!document.body) return;
+      decorateVJIdentityText_(document.body);
+      if (vjIdentityObserver_) vjIdentityObserver_.disconnect();
+      vjIdentityObserver_ = new MutationObserver(records => {
+        records.forEach(record => record.addedNodes.forEach(added => {
+          if (added.nodeType === Node.ELEMENT_NODE) decorateVJIdentityText_(added);
+          else if (added.nodeType === Node.TEXT_NODE && added.parentElement) decorateVJIdentityText_(added.parentElement);
+        }));
+      });
+      vjIdentityObserver_.observe(document.body, { childList: true, subtree: true });
+    }, () => {});
+    if (runner) runner.getACEVJIdentityMap(token);
+  }
+
+  function completeLogin_(token, role, user) {
     currentToken = token;
+    try { sessionStorage.setItem(SESSION_KEY, token); } catch (error) {}
+    currentRole = String(role || 'ADMIN').toUpperCase();
+    renderCurrentUser_(Object.assign({}, user || {}, { role: currentRole }));
+    loadCurrentUser_(token);
+    startVJIdentityDecoration_(token);
     authenticated = true;
-    try { localStorage.setItem(SESSION_KEY, token); } catch (error) {}
+    const logoutButton = document.getElementById('ace-shared-logout');
+    if (logoutButton) logoutButton.classList.remove('is-hidden');
     document.body.classList.remove('ace-auth-pending');
     if (gateElement) gateElement.remove();
     const callbacks = waitingCallbacks.splice(0, waitingCallbacks.length);
@@ -72,23 +329,29 @@
   function validateStoredSession_() {
     if (validationStarted) return;
     validationStarted = true;
-    try { currentToken = localStorage.getItem(SESSION_KEY) || ''; } catch (error) { currentToken = ''; }
-    if (!currentToken) {
-      createGate_();
+    createGate_();
+    let cachedToken = '';
+    try { cachedToken = sessionStorage.getItem(SESSION_KEY) || ''; } catch (error) {}
+    if (!cachedToken) {
+      currentToken = '';
       return;
     }
+    setStatus_('กำลังตรวจสอบเซสชันที่บันทึกไว้...');
     const runner = runWith_(result => {
-      if (result && result.success) completeLogin_(currentToken);
-      else {
-        try { localStorage.removeItem(SESSION_KEY); } catch (error) {}
+      if (result && result.success) {
+        completeLogin_(cachedToken, result.role, result);
+      } else {
+        try { sessionStorage.removeItem(SESSION_KEY); } catch (error) {}
         currentToken = '';
-        createGate_();
+        setStatus_('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+        passcodeElement.value = '';
       }
-    }, () => {
+    }, error => {
+      try { sessionStorage.removeItem(SESSION_KEY); } catch (storageError) {}
       currentToken = '';
-      createGate_();
+      setStatus_('ตรวจสอบเซสชันไม่ได้ กรุณาเข้าสู่ระบบใหม่');
     });
-    if (runner) runner.validateAdminSession(currentToken);
+    if (runner) runner.validateAdminSession(cachedToken);
   }
 
   function submitLogin_(event) {
@@ -101,7 +364,8 @@
     const runner = runWith_(result => {
       submitElement.disabled = false;
       if (result && result.success && result.token) {
-        completeLogin_(result.token);
+        try { sessionStorage.setItem(SESSION_KEY, result.token); } catch (error) {}
+        completeLogin_(result.token, result.role, result);
         return;
       }
       passcodeElement.value = '';
@@ -124,9 +388,158 @@
     validateStoredSession_();
   };
   window.withACEAdminSession_ = window.requireACELoginOnStartup_;
+  window.getACEUserRole_ = function () { return authenticated ? currentRole : 'GUEST'; };
+  window.logoutACEAdminSession_ = function () {
+    const token = currentToken;
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (error) {}
+    currentToken = '';
+    authenticated = false;
+    currentRole = 'GUEST';
+    const finish = function () { window.location.reload(); };
+    if (token && window.google && google.script && google.script.run) {
+      google.script.run.withSuccessHandler(finish).withFailureHandler(finish).logoutAdminSession(token);
+    } else finish();
+  };
+  window.setACECurrentLanguage_ = function (language) {
+    window.ACE_CURRENT_LANG = String(language || 'th').toLowerCase();
+    document.documentElement.lang = window.ACE_CURRENT_LANG === 'zh' ? 'zh-CN' : window.ACE_CURRENT_LANG;
+    if (sharedSidebar) {
+      const zh = window.ACE_CURRENT_LANG === 'zh';
+      const names = zh ? ['🏠 主仪表板','📺 TV 排行榜','📅 每日汇总','🗓️ 每周汇总','⚡ KPI 仪表板','📊 VJ / 团队 KPI','💎 VJ 奖金','🎤 MC 排班 / 奖金','↩ 返回'] : ['🏠 Main Dashboard','📺 TV Leaderboard','📅 สรุปรายวัน','🗓️ สรุปรายสัปดาห์','⚡ KPI Dashboard','📊 KPI VJ / Team','💎 Bonus VJ','🎤 ตารางงาน / Bonus MC','↩ ย้อนกลับ'];
+      sharedSidebar.querySelectorAll('.ace-menu-link:not(.ace-shared-logout)').forEach((link,index)=>{if(names[index])link.textContent=names[index];});
+      const logoutButton = document.getElementById('ace-shared-logout');
+      if (logoutButton) logoutButton.textContent = zh ? '🔒 退出登录' : '🔒 ออกจากระบบ';
+      sharedSidebar.querySelectorAll('.ace-menu-group').forEach((group,index)=>{group.textContent=zh?(index===0?'首页':'报表'): (index===0?'หน้าหลัก':'รายงาน');});
+      const brand = sharedSidebar.querySelector('.ace-sidebar-brand');
+      if (brand && brand.querySelector('span')) brand.querySelector('span').textContent = zh ? '系统菜单' : 'เมนูระบบ';
+    }
+  };
+
+  window.aceEscapeHtml_ = function (value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+    });
+  };
+  let statusModal_ = null;
+  let pendingRpcCount_ = 0;
+  const statusCallCounts_ = Object.create(null);
+  function getStatusLanguage_() {
+    const pageSelect = document.getElementById('lang-select') || document.getElementById('langSelect');
+    return String(window.ACE_CURRENT_LANG || (pageSelect && pageSelect.value) || 'th').toLowerCase();
+  }
+  function ensureStatusModal_() {
+    if (statusModal_ || !document.body) return;
+    statusModal_ = document.createElement('div');
+    statusModal_.id = 'ace-operation-status';
+    statusModal_.setAttribute('role', 'status');
+    statusModal_.setAttribute('aria-live', 'polite');
+    statusModal_.innerHTML = '<div class="ace-operation-card"><span class="ace-operation-spinner"></span><div><strong class="ace-operation-title"></strong><span class="ace-operation-subtitle"></span></div></div>';
+    document.body.appendChild(statusModal_);
+    const css = document.createElement('style');
+    css.textContent = '#ace-operation-status{position:fixed;inset:0;z-index:2147482000;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(2,6,23,.38);backdrop-filter:blur(2px)}#ace-operation-status.is-visible{display:flex}.ace-operation-card{box-sizing:border-box;display:flex;align-items:center;gap:15px;min-width:min(320px,92vw);max-width:460px;padding:20px 24px;border:1px solid #c7d2fe;border-radius:18px;background:#fff;color:#0f172a;box-shadow:0 24px 70px rgba(15,23,42,.3);font-family:Arial,sans-serif}.ace-operation-spinner{width:27px;height:27px;flex:none;border:3px solid #e0e7ff;border-top-color:#4f46e5;border-radius:50%;animation:ace-operation-spin .8s linear infinite}.ace-operation-title{display:block;font-size:14px;font-weight:800}.ace-operation-subtitle{display:block;margin-top:4px;color:#64748b;font-size:12px}@keyframes ace-operation-spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(css);
+  }
+  function operationText_(method) {
+    const lang = getStatusLanguage_();
+    const chinese = lang === 'zh' || lang === 'zh-cn';
+    const english = lang === 'en';
+    const name = String(method || '');
+    let key = /save|add|update|delete|create|sync|write|record/i.test(name) ? 'save' : /export|pdf|excel|download|report/i.test(name) ? 'export' : /login|auth|session/i.test(name) ? 'auth' : 'load';
+    const labels = {
+      th: { save: 'กำลังบันทึกข้อมูล', export: 'กำลังเตรียมไฟล์ส่งออก', auth: 'กำลังตรวจสอบสิทธิ์', load: 'กำลังโหลดข้อมูล' },
+      en: { save: 'Saving data', export: 'Preparing export', auth: 'Verifying access', load: 'Loading data' },
+      zh: { save: '正在保存数据', export: '正在准备导出文件', auth: '正在验证访问权限', load: '正在加载数据' }
+    };
+    let title = (labels[chinese ? 'zh' : english ? 'en' : 'th'])[key];
+    if (chinese) {
+      if (/KPI/i.test(name)) title += ' · KPI';
+      else if (/MC/i.test(name)) title += ' · MC';
+      else if (/VJ/i.test(name)) title += ' · VJ';
+    } else if (english) {
+      if (/KPI/i.test(name)) title += ' · KPI';
+      else if (/MC/i.test(name)) title += ' · MC';
+      else if (/VJ/i.test(name)) title += ' · VJ';
+    }
+    return { title, subtitle: chinese ? '请稍候，系统正在处理您的请求。' : english ? 'Please wait while the system processes your request.' : 'โปรดรอสักครู่ ระบบกำลังดำเนินการตามคำขอ' };
+  }
+  function showOperationStatus_(method) {
+    const name = String(method || '');
+    statusCallCounts_[name] = (statusCallCounts_[name] || 0) + 1;
+    // TV data refreshes automatically every 15 seconds. Show the modal for the
+    // first page load only; subsequent polling should not interrupt the board.
+    if (name === 'getTVDashboardData' && statusCallCounts_[name] > 1) return;
+    ensureStatusModal_();
+    if (!statusModal_) return;
+    const text = operationText_(method);
+    statusModal_.querySelector('.ace-operation-title').textContent = text.title;
+    statusModal_.querySelector('.ace-operation-subtitle').textContent = text.subtitle;
+    statusModal_.classList.add('is-visible');
+  }
+  function finishOperationStatus_() {
+    pendingRpcCount_ = Math.max(0, pendingRpcCount_ - 1);
+    if (!pendingRpcCount_ && statusModal_) window.setTimeout(() => {
+      if (!pendingRpcCount_ && statusModal_) statusModal_.classList.remove('is-visible');
+    }, 180);
+  }
+  function installOperationStatusBridge_() {
+    if (!(window.google && google.script && google.script.run) || google.script.run.__aceStatusBridge) return false;
+    try {
+      const scriptApi = google.script;
+      const originalRunner = scriptApi.run;
+      const baseRunner = originalRunner
+        .withSuccessHandler(function () { finishOperationStatus_(); })
+        .withFailureHandler(function () { finishOperationStatus_(); });
+      function wrapRunner_(runner) {
+        return new Proxy(runner, { get(target, property) {
+          if (property === '__aceStatusBridge') return true;
+          if (property === 'withSuccessHandler') return callback => wrapRunner_(target.withSuccessHandler(function () {
+            try { if (typeof callback === 'function') return callback.apply(this, arguments); }
+            finally { finishOperationStatus_(); }
+          }));
+          if (property === 'withFailureHandler') return callback => wrapRunner_(target.withFailureHandler(function () {
+            try { if (typeof callback === 'function') return callback.apply(this, arguments); }
+            finally { finishOperationStatus_(); }
+          }));
+          if (property === 'withUserObject') return userObject => wrapRunner_(target.withUserObject(userObject));
+          const value = Reflect.get(target, property, target);
+          if (typeof value !== 'function') return value;
+          return function () {
+            pendingRpcCount_++;
+            const methodName = String(property);
+            showOperationStatus_(methodName);
+            try {
+              const args = Array.prototype.slice.call(arguments);
+              const tokenRequired = /^(getSheetList|getDataFromSheet|getDailySummaryData|getDailyStatsSummary|getWeeklyStatsSummary|getACETrackingMonthlyStatsSummary|getMultiMonthComparisonData|getVJMultiMonthComparison|getMCSchedules|getMCBonusSummary|getMCBonusReport|getWeeklyMCBonusSummary|getMonthlyMCBonusSummary|getMonthlyMCBonusFromTeamData|getMCModalDataOptions|getVJBonusPayload|getVJAndTeamKPIData|getIndividualKPISetupData|getVJListForIndividualKPI|distributeKPI|getSheetData|getDashboardData|getMonthlyStatsSummary|getMonthlyComparisonData|getKPITargetsMapForAdmin|getMonthlySheetNames|getVJAvatarMap|getVJProfilesMap|getTeamDataSchedules|getStatusOverrides|translateText)$/.test(methodName);
+              if (tokenRequired && currentToken && args[args.length - 1] !== currentToken) args.push(currentToken);
+              return value.apply(target, args);
+            } catch (error) { finishOperationStatus_(); throw error; }
+          };
+        }});
+      }
+      const proxy = wrapRunner_(baseRunner);
+      try { scriptApi.run = proxy; } catch (error) {}
+      if (scriptApi.run !== proxy) {
+        const descriptor = Object.getOwnPropertyDescriptor(scriptApi, 'run');
+        if (!descriptor || descriptor.configurable) Object.defineProperty(scriptApi, 'run', { configurable: true, get: () => proxy });
+      }
+      return !!scriptApi.run.__aceStatusBridge;
+    } catch (error) {
+      console.warn('ACE operation status bridge unavailable', error);
+      return false;
+    }
+  }
+
+  window.addEventListener('pageshow', function (event) {
+    if (event.persisted) window.location.reload();
+  });
 
   function startGate_() {
     if (!document.body) return;
+    startSystemClock_();
+    ensureStatusModal_();
+    if (window.ACE_STATUS_ONLY_) return;
+    ensureSidebar_();
+    if (window.ACE_CURRENT_LANG) window.setACECurrentLanguage_(window.ACE_CURRENT_LANG);
     if (authenticated) {
       document.body.classList.remove('ace-auth-pending');
       return;
@@ -138,5 +551,12 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startGate_, { once: true });
   else startGate_();
+  if (!installOperationStatusBridge_()) {
+    let bridgeAttempts = 0;
+    const bridgeTimer = window.setInterval(() => {
+      bridgeAttempts++;
+      if (installOperationStatusBridge_() || bridgeAttempts >= 30) window.clearInterval(bridgeTimer);
+    }, 250);
+  }
 })();
 </script>
