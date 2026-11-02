@@ -15,6 +15,57 @@
   let submitElement = null;
   const waitingCallbacks = [];
   let sharedSidebar = null;
+  let mobileInstallPrompt_ = null;
+  const installNoticeDismissedKey_ = 'ACE_MOBILE_INSTALL_NOTICE_DISMISSED_V1';
+
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    mobileInstallPrompt_ = event;
+  });
+
+  function makeTablesMobileFriendly_(root) {
+    if (!root || !root.querySelectorAll) return;
+    const tables = [];
+    if (root.nodeType === Node.ELEMENT_NODE && root.matches('table')) tables.push(root);
+    root.querySelectorAll('table').forEach(table => tables.push(table));
+    tables.forEach(table => {
+      if (table.closest('.ace-responsive-table')) return;
+      if (table.querySelectorAll('th').length > 6) table.classList.add('ace-wide-table');
+      const wrapper = document.createElement('div');
+      wrapper.className = 'ace-responsive-table';
+      wrapper.setAttribute('role', 'region');
+      wrapper.setAttribute('aria-label', 'ตาราง เลื่อนด้านข้างเพื่อดูข้อมูลทั้งหมด');
+      wrapper.setAttribute('tabindex', '0');
+      table.parentNode.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    });
+  }
+
+  function showMobileInstallNotice_(forceOpen) {
+    try { if (!forceOpen && localStorage.getItem(installNoticeDismissedKey_) === '1') return; } catch (error) {}
+    if (document.getElementById('ace-mobile-install-notice') || !document.body) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'ace-mobile-install-notice';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'ace-mobile-install-title');
+    overlay.innerHTML = '<section class="ace-install-card"><button type="button" class="ace-install-close" aria-label="ปิด">×</button><div class="ace-install-icon">📲</div><h2 id="ace-mobile-install-title">เพิ่ม ACE Tracking ไว้บนมือถือ</h2><p>เพิ่มทางลัดไว้ที่หน้าจอหลัก เพื่อเปิดเว็บระบบได้สะดวกเหมือนแอป (ระบบนี้ยังไม่มีไฟล์ APK)</p><div class="ace-install-help"><strong>วิธีติดตั้ง</strong><span>Android: เปิดเมนู Chrome แล้วเลือก “ติดตั้งแอป” หรือ “เพิ่มลงในหน้าจอหลัก”</span><span>iPhone: เปิดด้วย Safari กดแชร์ แล้วเลือก “เพิ่มไปยังหน้าจอโฮม”</span></div><button type="button" class="ace-install-action">ปิด</button></section>';
+    const dismiss = () => {
+      try { localStorage.setItem(installNoticeDismissedKey_, '1'); } catch (error) {}
+      overlay.remove();
+    };
+    overlay.querySelector('.ace-install-close').addEventListener('click', dismiss);
+    overlay.querySelector('.ace-install-action').addEventListener('click', async () => {
+      if (mobileInstallPrompt_) {
+        try { await mobileInstallPrompt_.prompt(); } catch (error) {}
+        mobileInstallPrompt_ = null;
+      }
+      dismiss();
+    });
+    overlay.addEventListener('click', event => { if (event.target === overlay) dismiss(); });
+    document.body.appendChild(overlay);
+  }
+  window.showACEMobileInstallNotice_ = () => showMobileInstallNotice_(true);
 
   function ensureSidebar_() {
     if (window.ACE_STATUS_ONLY_) return;
@@ -49,6 +100,7 @@
       '<a class="ace-menu-link" data-ace-page="kpi_vj" href="#" target="_top">📊 KPI VJ / Team</a>' +
       '<a class="ace-menu-link" data-ace-page="vjbonus" href="#" target="_top">💎 Bonus VJ</a>' +
       '<a class="ace-menu-link" data-ace-page="mc_w" href="#" target="_top">🎤 ตารางงาน / Bonus MC</a>' +
+      '<button class="ace-menu-link" type="button" onclick="window.showACEMobileInstallNotice_()">📲 วิธีติดตั้งบนมือถือ</button>' +
       '<button class="ace-menu-link ace-back-link" type="button" onclick="window.goBackACEPage_()">↩ ย้อนกลับ</button>' +
       '<button id="ace-shared-logout" class="ace-menu-link ace-shared-logout is-hidden" type="button" onclick="window.logoutACEAdminSession_()">🔒 ออกจากระบบ</button>';
     document.body.appendChild(sharedSidebar);
@@ -156,6 +208,20 @@
     #ace-auth-gate button { width: 100%; margin-top: 8px; padding: 13px; border: 0; border-radius: 11px; background: #4f46e5; color: white; font-size: 15px; font-weight: 700; cursor: pointer; }
     #ace-auth-gate button:disabled { opacity: .6; cursor: wait; }
     #ace-auth-gate .ace-auth-error { min-height: 18px; margin: 8px 0; color: #b91c1c; font-size: 12px; text-align: center; }
+    .ace-responsive-table { display:block; width:100%; max-width:100%; overflow-x:auto; overscroll-behavior-x:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin; }
+    .ace-responsive-table:focus { outline:2px solid #818cf8; outline-offset:2px; }
+    .ace-responsive-table table { min-width:680px; }
+    .ace-responsive-table table.ace-wide-table { min-width:820px; }
+    @media(max-width:640px) { .ace-responsive-table table { min-width:640px; } .ace-responsive-table table.ace-wide-table { min-width:820px; } .ace-responsive-table td,.ace-responsive-table th { padding-left:.55rem!important; padding-right:.55rem!important; font-size:.72rem; } }
+    #ace-mobile-install-notice { position:fixed; inset:0; z-index:2147483100; display:flex; align-items:center; justify-content:center; padding:18px; background:rgba(2,6,23,.72); backdrop-filter:blur(5px); font-family:Arial,sans-serif; }
+    #ace-mobile-install-notice .ace-install-card { position:relative; box-sizing:border-box; width:min(100%,430px); padding:28px 24px 22px; border:1px solid #c7d2fe; border-radius:22px; background:#fff; color:#0f172a; box-shadow:0 24px 80px rgba(0,0,0,.4); }
+    #ace-mobile-install-notice .ace-install-close { position:absolute; top:10px; right:12px; width:36px; height:36px; border:0; border-radius:50%; background:#eef2ff; color:#334155; font-size:25px; cursor:pointer; }
+    #ace-mobile-install-notice .ace-install-icon { font-size:34px; }
+    #ace-mobile-install-notice h2 { margin:8px 36px 7px 0; font-size:20px; font-weight:800; }
+    #ace-mobile-install-notice p { margin:0 0 16px; color:#475569; font-size:14px; line-height:1.5; }
+    #ace-mobile-install-notice .ace-install-help { display:grid; gap:8px; padding:13px; border-radius:13px; background:#f1f5f9; color:#334155; font-size:12px; line-height:1.5; }
+    #ace-mobile-install-notice .ace-install-help strong { color:#4338ca; font-size:13px; }
+    #ace-mobile-install-notice .ace-install-action { width:100%; margin-top:16px; padding:12px 16px; border:0; border-radius:12px; background:#4f46e5; color:#fff; font-size:14px; font-weight:700; cursor:pointer; }
   `;
   document.head.appendChild(style);
 
@@ -308,7 +374,7 @@
     if (runner) runner.getACEVJIdentityMap(token);
   }
 
-  function completeLogin_(token, role, user) {
+  function completeLogin_(token, role, user, isFreshLogin) {
     currentToken = token;
     try { sessionStorage.setItem(SESSION_KEY, token); } catch (error) {}
     currentRole = String(role || 'ADMIN').toUpperCase();
@@ -320,6 +386,7 @@
     if (logoutButton) logoutButton.classList.remove('is-hidden');
     document.body.classList.remove('ace-auth-pending');
     if (gateElement) gateElement.remove();
+    if (isFreshLogin) window.setTimeout(showMobileInstallNotice_, 250);
     const callbacks = waitingCallbacks.splice(0, waitingCallbacks.length);
     callbacks.forEach(item => {
       try { item.onReady(token); } catch (error) { item.onError(error.message || String(error)); }
@@ -365,7 +432,7 @@
       submitElement.disabled = false;
       if (result && result.success && result.token) {
         try { sessionStorage.setItem(SESSION_KEY, result.token); } catch (error) {}
-        completeLogin_(result.token, result.role, result);
+        completeLogin_(result.token, result.role, result, true);
         return;
       }
       passcodeElement.value = '';
@@ -551,6 +618,19 @@
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startGate_, { once: true });
   else startGate_();
+  const initializeResponsiveTables_ = () => {
+    makeTablesMobileFriendly_(document.body);
+    if (window.MutationObserver && document.body) {
+      const tableObserver = new MutationObserver(records => records.forEach(record => {
+        record.addedNodes.forEach(node => {
+          if (node.nodeType === Node.ELEMENT_NODE) makeTablesMobileFriendly_(node);
+        });
+      }));
+      tableObserver.observe(document.body, { childList: true, subtree: true });
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initializeResponsiveTables_, { once: true });
+  else initializeResponsiveTables_();
   if (!installOperationStatusBridge_()) {
     let bridgeAttempts = 0;
     const bridgeTimer = window.setInterval(() => {

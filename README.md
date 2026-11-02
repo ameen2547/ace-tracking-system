@@ -17,6 +17,7 @@ This bundle maps the supplied source exports into Google Apps Script filenames a
 - `MC_W.html` — MC schedule and bonus (`?page=mc_w`)
 - `kpi_vj_data.html` — VJ/team KPI (`?page=kpi_vj` or `M`)
 - `KPI_data.html` — KPI target dashboard (`?page=kpi_data` or `kpi`)
+- `HOW_TO_INSTALL_MOBILE.md` — วิธีเพิ่มทางลัด ACE Tracking ลงหน้าจอ Android/iPhone
 
 ## KPI target data source
 
@@ -68,6 +69,9 @@ The main Dashboard and standalone report pages have sidebars that collapse on de
 - Reduced the Dashboard toolbar to score entry and a single “More” menu for exports, screenshot, team summary and KPI entry tools.
 - Limited Dashboard editing controls to `ADMIN` and `SUPER_ADMIN`; audit history and Super Admin controls are shown only to `SUPER_ADMIN`. Backend session checks remain the authority for protected operations.
 - Added desktop sidebar collapse/expand controls and fixed horizontal overflow in the navigation.
+- Added shared responsive table wrappers across all routed pages; dense tables keep readable column widths and scroll horizontally on small screens.
+- After a fresh successful login, show mobile home-screen installation instructions once. Dismissal is saved in local storage, and the main dashboard uses the same notice.
+- Mobile install means adding the Apps Script Web App URL to the phone home screen; this source bundle does not produce APK or App Store packages. See `HOW_TO_INSTALL_MOBILE.md`.
 - Added a shared operation status modal for Apps Script requests. It identifies loading, saving, exporting and access checks; the TV board suppresses the modal during background refresh after its first load.
 - Added Simplified Chinese controls and interface translations to the VJ Bonus, TV Leaderboard and KPI Dashboard pages; existing language controls now also update the shared operation modal and sidebar.
 - This source update has not been tested against a live Apps Script deployment. Deploy to a test copy first and verify every route and authenticated action.

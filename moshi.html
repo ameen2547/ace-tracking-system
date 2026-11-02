@@ -3901,6 +3901,9 @@ if (viewName === 'monthly-stats') {
               loadDashboardTikTokProfile_();
               closeAdminModal();
               showToast(res.message || 'เข้าสู่ระบบสำเร็จ!', 'success');
+              if (typeof window.showACEMobileInstallNotice_ === 'function') {
+                window.setTimeout(window.showACEMobileInstallNotice_, 250);
+              }
               fetchSheetList();
             } else {
               const msgEl = document.getElementById('admin-login-msg');
